@@ -1,0 +1,119 @@
+{
+  "author": "Quaternius",
+  "pack": "Stylized Nature MegaKit Standard",
+  "license": "CC0-1.0",
+  "source": "https://quaternius.itch.io/stylized-nature-megakit",
+  "prepared": "2026-11-01",
+  "models": [
+    {
+      "name": "TreeA",
+      "source": "glTF/CommonTree_1.gltf",
+      "sha256": "b51cdea6545edb51d102dd6c27caafe62aa75e3c328ac8f9039f4e7bfd690bfa"
+    },
+    {
+      "name": "TreeB",
+      "source": "glTF/CommonTree_3.gltf",
+      "sha256": "17c6537aa8042bb7255fbb501bf7aeb2b6db87c16766f794f9c37be3ce70c976"
+    },
+    {
+      "name": "TreeC",
+      "source": "glTF/CommonTree_5.gltf",
+      "sha256": "fb7061f2bf9fe850870b056431f8f66cd8fdeb443c90695c5efbcf1fe6876d53"
+    },
+    {
+      "name": "Pine",
+      "source": "glTF/Pine_2.gltf",
+      "sha256": "57bd4732170b6c7e51bcf78fe5adaabf142f95a50378d8d3051d1f20a04d3c2f"
+    },
+    {
+      "name": "Bush",
+      "source": "glTF/Bush_Common.gltf",
+      "sha256": "77811fca92610cb254713d3d49d5029ab6cf13050c3afb61aa942786a7b2ca90"
+    },
+    {
+      "name": "Fern",
+      "source": "glTF/Fern_1.gltf",
+      "sha256": "d41915cffe9dbbde1ae88be381eb9c60f7caa2274511436cc78fe4de627468ab"
+    },
+    {
+      "name": "Grass",
+      "source": "glTF/Grass_Common_Short.gltf",
+      "sha256": "6957b50622c9e26e7296c1b47ea8653bc0d957e0a547de444e2ed96f0075a21a"
+    },
+    {
+      "name": "FlowerA",
+      "source": "glTF/Flower_3_Group.gltf",
+      "sha256": "4df1612371982c543f930d6b213967372e0d459622d7eff7fc2ed1ddbfaa3b6c"
+    },
+    {
+      "name": "FlowerB",
+      "source": "glTF/Flower_4_Group.gltf",
+      "sha256": "69ead56b36b50f06a0cf18380797fce7434302e9b2da7bf68a85014b993c6134"
+    },
+    {
+      "name": "RockA",
+      "source": "glTF/Rock_Medium_1.gltf",
+      "sha256": "5d1ab1fa03218f4a908728ed0eabe6486344a7e4f510b0d3d6f837fd1d011bd8"
+    },
+    {
+      "name": "RockB",
+      "source": "glTF/Rock_Medium_3.gltf",
+      "sha256": "9a575b911372cf91693aa3a56aea8137ec2251c2b99fb34a31272ee64503047f"
+    }
+  ],
+  "textures": [
+    {
+      "file": "Bark_NormalTree_Normal.png",
+      "bytes": 4384496,
+      "sha256": "852f6155404b8c39e100e41e26970e02a6a5c81b482d3726618dab28e3ad03a2"
+    },
+    {
+      "file": "Bark_NormalTree.png",
+      "bytes": 3894788,
+      "sha256": "f36e94fdd73255347325b998e02a0b2575fdf714b0315bfe5e8ff34bc8e13603"
+    },
+    {
+      "file": "Leaves_NormalTree.png",
+      "bytes": 158772,
+      "sha256": "171ad1c8fa6ddde351a3b3c9e2b1457d5c7a4a43ba4fd55a83801029db797151"
+    },
+    {
+      "file": "Leaf_Pine.png",
+      "bytes": 71747,
+      "sha256": "b1a6de1f0f2d1d68a68b3e70b38325c7f2293ab88e2b2c26d9d426407682b26b"
+    },
+    {
+      "file": "Leaves_TwistedTree.png",
+      "bytes": 69611,
+      "sha256": "d548e707fa34a558f88f477fa98f7b4ad3afbd4ceb7ab954506be694edf0f2ba"
+    },
+    {
+      "file": "Leaves.png",
+      "bytes": 2586432,
+      "sha256": "23248cebe28a24e78add32db3c2ee2f4d7b9219e9d2467279722f0197a7b6bd5"
+    },
+    {
+      "file": "Grass.png",
+      "bytes": 33605,
+      "sha256": "5d69048193b246a73c996b892607fb36c75d0c60afcb2dab8aa12de3c0b2d9bd"
+    },
+    {
+      "file": "Flowers.png",
+      "bytes": 444609,
+      "sha256": "5c531f2329c241c625aafd6cb769de29f33b480ef2a16491c2489f3c68e62a6a"
+    },
+    {
+      "file": "Rocks_Diffuse.png",
+      "bytes": 2517398,
+      "sha256": "b813696df6081f469a127092eb0ce45cc39d56f3ccc0699152bfcd3804810b48"
+    }
+  ],
+  "output": {
+    "file": "megakit.glb",
+    "bytes": 15714228,
+    "sha256": "ad3c9e31601961ff768237fe6dd0c2922db76f640ba4279d589032b9d135ecc8",
+    "meshCount": 11,
+    "materialCount": 8,
+    "textureCount": 9
+  }
+}

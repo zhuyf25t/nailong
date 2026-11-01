@@ -1,0 +1,108 @@
+{
+  "tool": "Built-in image_gen.imagegen",
+  "purpose": "跳跃及冰霜/火箭/烟雾/闪光概念图与键位更新",
+  "selected_assets": [
+    "05-thirdperson-jump-controls.png",
+    "07-height-jump-controls.png",
+    "13-combat-jump-controls.png",
+    "08-respawn-jump-controls.png",
+    "14-jump-attack.png",
+    "15-frost-rocket-v2.png",
+    "16-smoke-flash-v2.png"
+  ],
+  "images": [
+    {
+      "file": "05-thirdperson-jump-controls.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "prompt": "Use case: text-localization / precise UI edit. Edit ONLY the bottom-center keyboard control hint bar in this image. Replace its whole text with a compact readable line \"WASD 移动 · 左键 射击 · SPACE 跳跃 · SHIFT 冲刺\". SPACE must be labelled 跳跃, SHIFT labelled 冲刺. Keep bar visually similar deep teal with small dark keycaps; keep within horizontal space and do not overlap health or right HUD. No other changes: keep exact player size, pose, all world geometry, colors, effect, enemies, health, top text, numbers and UI. Same canvas size and aspect. Preserve the existing image carefully.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-c5acfbba-564c-4d95-a186-4ca40754228a.png",
+      "asset": "../assets/05-thirdperson-jump-controls.png",
+      "selected": true
+    },
+    {
+      "file": "07-height-jump-controls.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-final.png"
+      ],
+      "prompt": "Use case: text-localization / precise UI edit. Edit ONLY the bottom-center keyboard control hint bar in this image. Replace its whole text with a compact readable line \"WASD 移动 · 左键 射击 · SPACE 跳跃 · SHIFT 冲刺\". SPACE must be labelled 跳跃, SHIFT labelled 冲刺. Keep bar visually similar deep teal with small dark keycaps; keep within horizontal space and do not overlap health or right HUD. No other changes: keep exact player size, pose, all world geometry, colors, effect, enemies, health, top text, numbers and UI. Same canvas size and aspect. Preserve the existing image carefully.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-aad7ba63-ccdb-4b00-909f-494495664a67.png",
+      "asset": "../assets/07-height-jump-controls.png",
+      "selected": true
+    },
+    {
+      "file": "13-combat-jump-controls.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/13-skill-combat-v2.png"
+      ],
+      "prompt": "Use case: text-localization / precise UI edit. Edit ONLY the bottom-center keyboard control hint bar in this image. Replace its whole text with a compact readable line \"WASD 移动 · 左键 射击 · SPACE 跳跃 · SHIFT 冲刺\". SPACE must be labelled 跳跃, SHIFT labelled 冲刺. Keep bar visually similar deep teal with small dark keycaps; keep within horizontal space and do not overlap health or right HUD. No other changes: keep exact player size, pose, all world geometry, colors, effect, enemies, health, top text, numbers and UI. Same canvas size and aspect. Preserve the existing image carefully.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-26030d91-8c9d-4a57-8ab1-ee2ef4ced995.png",
+      "asset": "../assets/13-combat-jump-controls.png",
+      "selected": true
+    },
+    {
+      "file": "08-respawn-jump-controls.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/08-respawn-final.png"
+      ],
+      "prompt": "Use case: text-localization / precise UI edit. Edit ONLY the bottom-center keyboard control hint bar in this image. Replace its whole text with a compact readable line \"WASD 移动 · 左键 射击 · SPACE 跳跃 · SHIFT 冲刺\". SPACE must be labelled 跳跃, SHIFT labelled 冲刺. Keep bar visually similar deep teal with small dark keycaps; keep within horizontal space and do not overlap health or right HUD. No other changes: keep exact player size, pose, all world geometry, colors, effect, enemies, health, top text, numbers and UI. Same canvas size and aspect. Preserve the existing image carefully.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-5f5481a1-541d-40f4-a7c0-4142fb62288a.png",
+      "asset": "../assets/08-respawn-jump-controls.png",
+      "selected": true
+    },
+    {
+      "file": "14-jump-attack.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-final.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "prompt": "Use case: stylized-concept. Both references provide style, protagonist identity and distant camera. Create one clear in-game scene of a yellow baby dragon JUMPING OFF A LOW PLATFORM AND SHOOTING DOWNWARD. Exact established cute low-poly Three.js-style garden art: ALL characters have YELLOW round baby dinosaur bodies, small orange dorsal nubs, cream belly, only scarf color differs. Main player blue scarf; opponents red scarf. Faceted leafy green shrubs, cream plaster low walls, wooden crates, vivid green grass, blue sky, warm gentle daylight, restrained simple materials. Small characters and plentiful visible terrain. Landscape 1.6:1. Teal/cream simple Chinese UI. No realistic military equipment, no gore, no cinematic volumetric rendering, no closeup player, no camera-mode selector. Camera behind and slightly above main player, pulled back. A low cream terrace about one to two character-heights above the courtyard is visible at left, with a ramp back up in background. Blue-scarf player SMALL about 15 percent full image height, hovering visibly just beyond terrace lip in mid-fall at center-left, legs tucked naturally, holding an orange toy scatter blaster aimed diagonally DOWN toward the lower grass courtyard. Three small orange-blue soft pellets trace a downward fan toward red-scarf yellow opponent below-right beside a crate. Clear air gap below player feet; oval shadow on LOWER ground directly underneath makes jump height readable. No wings, no flight, no rocket propulsion. Ground does not look bottomless; safe short drop and landing area visibly clear. Small pale curved motion cue suggests departure from platform but do not duplicate player. White cursor ring on lower opponent. HUD top left \"花园乱斗\", timer\"01:18\", health80, tiny bottom line \"SPACE 跳跃 · SHIFT 冲刺 · 左键 空中射击\". Convey the fun of changing height while shooting, ordinary feasible 3D graphics.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-04496a13-c569-42b0-a85c-afb72afe0038.png",
+      "asset": "../assets/14-jump-attack.png",
+      "selected": true
+    },
+    {
+      "file": "15-frost-rocket.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-final.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/11-weapons.png"
+      ],
+      "prompt": "Use case: stylized-concept, two-panel game concept comparison. Use image1 for environment/camera/player and image2 for toy gun language. Exact established cute low-poly Three.js-style garden art: ALL characters have YELLOW round baby dinosaur bodies, small orange dorsal nubs, cream belly, only scarf color differs. Main player blue scarf; opponents red scarf. Faceted leafy green shrubs, cream plaster low walls, wooden crates, vivid green grass, blue sky, warm gentle daylight, restrained simple materials. Small characters and plentiful visible terrain. Landscape 1.6:1. Teal/cream simple Chinese UI. No realistic military equipment, no gore, no cinematic volumetric rendering, no closeup player, no camera-mode selector. One image cleanly divided into two equally sized vertical panels with a narrow warm-cream gutter. Same garden and small player scale throughout. LEFT panel labelled \"冰霜枪\" in a small teal pill: blue-scarf yellow player at lower foreground holds compact icy-blue TOY blaster, sends small icy blue beads toward red-scarf yellow opponent near crate. Opponent has frost crust around feet, a few tiny snow crystals and localized thin cool vapor circling ankles; readable character, not frozen solid, no ice cage. RIGHT panel labelled \"火箭筒\": small blue-scarf yellow player holds orange rounded oversized TOY launcher, a single orange-tipped toy rocket is midway across courtyard toward a crate. A slender WHITE VAPOR TRAIL follows the rocket path: densest thinnest fresh smoke immediately behind moving rocket, older portions farther back toward muzzle spread wider and become translucent fading puffs. Trail clearly stays along past flight path in the air, not a laser or solid rope. A tiny orange exhaust at rocket tail; no massive explosion yet. Simple sprites/billboard-style soft smoke, avoid photorealistic volumetric cloud. No weapon cards or charts, only two coherent gameplay vignettes and the two labels. Optional subtle health bars but no keyboard labels.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-3c15ea2c-03a6-40ad-879a-5de676a530ae.png",
+      "asset": "../assets/15-frost-rocket.png",
+      "selected": false
+    },
+    {
+      "file": "16-smoke-flash.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-final.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "prompt": "Use case: stylized-concept, two-panel game vignette. Exact established cute low-poly Three.js-style garden art: ALL characters have YELLOW round baby dinosaur bodies, small orange dorsal nubs, cream belly, only scarf color differs. Main player blue scarf; opponents red scarf. Faceted leafy green shrubs, cream plaster low walls, wooden crates, vivid green grass, blue sky, warm gentle daylight, restrained simple materials. Small characters and plentiful visible terrain. Landscape 1.6:1. Teal/cream simple Chinese UI. No realistic military equipment, no gore, no cinematic volumetric rendering, no closeup player, no camera-mode selector. Reference images provide exact garden, small player and camera. Divide image into two equal vertical panels with thin cream gutter. LEFT label \"烟雾弹\": blue-scarf small yellow player in foreground by a low wall, on grass near a narrow passage a small rounded toy smoke canister emits a LOCALIZED grey-white opaque smoke dome about 2 character heights, coherent obscuring middle corridor; part of cream wall disappears behind smoke. Clearly no visible enemy silhouette, outline, nametag or health through the smoke. Surrounding foreground and side routes remain clear; bullets can conceptually pass through. RIGHT label \"闪光弹\": same garden, small blue-scarf player retreating beside a crate, a small toy flash canister at mid-ground begins one warm pale cream flash with a simple bright core and restrained rays; show a cream-grey fading veil across part of view, NOT a pure-white blown-out entire picture and not a repeated strobe. Enemy not visible through veil. A small corner UI chip \"柔和闪光\" suggests reduced-brightness display. Keep player's size about 15 percent of full panel height, ample terrain, simple plausible browser-game effects. Only these short labels; no extra explanatory paragraphs.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-88e51f55-4532-435d-8e07-decd15a07ff2.png",
+      "asset": "../assets/16-smoke-flash.png",
+      "selected": false
+    },
+    {
+      "file": "15-frost-rocket-v2.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/15-frost-rocket.png"
+      ],
+      "prompt": "Use case: precise-object-edit. Edit this two-panel image. In BOTH panels make the foreground blue-scarf yellow player and held weapon 35 percent smaller, retaining their feet position in the lower part of panel. Character head-to-feet height should be about 16 percent of canvas height. Preserve all other layout, panels, labels, garden, enemy, camera, projectile paths, frost effect and white rocket smoke. Reconnect the guns naturally to the start of their paths. This is a pulled-back gameplay camera with small characters, not an over-shoulder closeup. Keep 1.6:1 overall canvas and the same cute yellow dragon style. No new UI or text.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-8f0d010e-12f8-446a-8b59-70ddcdaeff63.png",
+      "asset": "../assets/15-frost-rocket-v2.png",
+      "selected": true
+    },
+    {
+      "file": "16-smoke-flash-v2.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/16-smoke-flash.png"
+      ],
+      "prompt": "Use case: compositing / layout edit. Recompose this concept into a LANDSCAPE 1600 x 1000 canvas, overall 8:5 ratio (not a panoramic 2.5:1 banner). Keep the two equally sized vertical panels, same headings 烟雾弹 and 闪光弹 and 柔和闪光 chip. Expand visible sky and ground vertically as needed; maintain coherent same garden geometry and pulled-back camera. Main player in each panel should be SMALL, about 16 percent of total canvas height. Preserve yellow dragon identity, blue scarf, low-poly pastel style, left dense localized smoke obscuring corridor, right single restrained warm flash and partial veil. Replace the two milk-bottle-looking objects used as grenades: LEFT use a small matte GREY round toy capsule with an orange stripe emitting smoke, RIGHT use a small GOLD faceted toy ball with a pale flash. They must look distinct from the game's white milk health bottles. No visible enemy outline or nametag in smoke. Keep rest of scene and labels consistent. Do not add text or exaggerate glow.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-9d066a8c-a85b-4d85-a6b1-9bb2a963a238.png",
+      "asset": "../assets/16-smoke-flash-v2.png",
+      "selected": true
+    }
+  ]
+}

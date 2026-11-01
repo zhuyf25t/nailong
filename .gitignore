@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+.local/
+.tools/
+**/target/
+**/node_modules/
+**/dist/
+.bsp/
+.metals/
+.idea/
+.vite/
+.npm-cache/
+.asset-cache/
+__pycache__/
+*.py[cod]
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+# Unpacked sample sources are tracked; the original archive also contains IDE/build caches.
+/sample/sample.zip

@@ -1,0 +1,108 @@
+{
+  "generator": "scripts/generate-assets.mjs",
+  "units": "metres",
+  "up": "+Y",
+  "assets": [
+    {
+      "name": "nailong.glb",
+      "bytes": 691320,
+      "meshes": 26,
+      "size": [
+        1.44,
+        2.16,
+        1.605
+      ],
+      "animations": [
+        "Idle",
+        "Walk",
+        "Aim",
+        "Shoot"
+      ],
+      "nodes": 55
+    },
+    {
+      "name": "bubble-gun.glb",
+      "bytes": 80332,
+      "meshes": 4,
+      "size": [
+        0.305,
+        0.522,
+        0.695
+      ],
+      "animations": [],
+      "nodes": 6
+    },
+    {
+      "name": "target.glb",
+      "bytes": 61204,
+      "meshes": 5,
+      "size": [
+        1.15,
+        1.844,
+        0.614
+      ],
+      "animations": [],
+      "nodes": 6
+    },
+    {
+      "name": "crate.glb",
+      "bytes": 342432,
+      "meshes": 5,
+      "size": [
+        1.314,
+        1.309,
+        1.314
+      ],
+      "animations": [],
+      "nodes": 10
+    },
+    {
+      "name": "wall-segment.glb",
+      "bytes": 25148,
+      "meshes": 3,
+      "size": [
+        4.02,
+        1.24,
+        0.46
+      ],
+      "animations": [],
+      "nodes": 4
+    },
+    {
+      "name": "tree.glb",
+      "bytes": 143940,
+      "meshes": 6,
+      "size": [
+        2.49,
+        3.401,
+        2.11
+      ],
+      "animations": [],
+      "nodes": 9
+    },
+    {
+      "name": "bush.glb",
+      "bytes": 102956,
+      "meshes": 5,
+      "size": [
+        1.83,
+        1.077,
+        1.142
+      ],
+      "animations": [],
+      "nodes": 8
+    },
+    {
+      "name": "rock.glb",
+      "bytes": 5816,
+      "meshes": 1,
+      "size": [
+        1.291,
+        0.775,
+        0.951
+      ],
+      "animations": [],
+      "nodes": 2
+    }
+  ]
+}

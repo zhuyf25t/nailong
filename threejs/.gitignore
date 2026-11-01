@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vite/
+*.log
+.npm-cache/
+.asset-cache/
+.megakit-*.html

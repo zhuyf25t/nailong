@@ -1,0 +1,190 @@
+{
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "preparedAt": "2026-10-31T16:40:18.166Z",
+  "sourceGeometryAndPbrTexturesPreserved": true,
+  "outputs": [
+    {
+      "file": "props.glb",
+      "bytes": 14770648,
+      "sha256": "ffcf685e16451637143c66c42014f6ef27e95469ba5c0065963db95ed20c44ac",
+      "meshes": 2,
+      "materials": 2,
+      "textures": 6,
+      "skins": 0,
+      "animations": [],
+      "roots": [
+        "SupplyCrate",
+        "Barrel"
+      ],
+      "sources": [
+        {
+          "name": "SupplyCrate",
+          "pack": "Fantasy Props MegaKit Standard",
+          "file": "Exports/glTF/Crate_Wooden.gltf",
+          "source": "https://quaternius.itch.io/fantasy-props-megakit",
+          "sha256": "fb06d4b7b9bbfbb9dc51fa56ecff3fe7ba8e9142d643cabedd17a55d7ea46ee5",
+          "buffers": [
+            {
+              "file": "Crate_Wooden.bin",
+              "bytes": 66496,
+              "sha256": "7ae016386790e5998fbdf1656a5dc53a3f1374c3525b22798d84397a36ae937b"
+            }
+          ],
+          "triangles": 1576,
+          "meshes": 1,
+          "skins": 0,
+          "animations": []
+        },
+        {
+          "name": "Barrel",
+          "pack": "Fantasy Props MegaKit Standard",
+          "file": "Exports/glTF/Barrel.gltf",
+          "source": "https://quaternius.itch.io/fantasy-props-megakit",
+          "sha256": "cececb2da345addb21567e3ce1b30a9da071b689bcec59d85cd7a4446f531e87",
+          "buffers": [
+            {
+              "file": "Barrel.bin",
+              "bytes": 57144,
+              "sha256": "d8f963e2975b6bbd4b631b5cd7ade2d5dfc76dfb9f8387e2d398935f5405cf20"
+            }
+          ],
+          "triangles": 824,
+          "meshes": 1,
+          "skins": 0,
+          "animations": []
+        }
+      ],
+      "images": [
+        {
+          "file": "T_Trim_Furniture_Normal.png",
+          "bytes": 3485710,
+          "sha256": "3340c4cc47ff06d5e94a2dbe2a2a12d914d0ef055fcf66f63d876666bd160e42",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Trim_Furniture_BaseColor.png",
+          "bytes": 2232961,
+          "sha256": "075fbc9ec2fabc15732bd4025b6f63a0b25762df38440d06bf30437565d39bab",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Trim_Furniture_ORM.png",
+          "bytes": 2064585,
+          "sha256": "7bf417e82baf313793c5791bf48cdc8e573f1f7136197785bf0eb235cb0f8153",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Trim_Metal_Normal.png",
+          "bytes": 3625541,
+          "sha256": "ab7315c864c9a9e6d716c940a599928506e1569d3b0c9085f8f1a64ec520d790",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Trim_Metal_BaseColor.png",
+          "bytes": 1361221,
+          "sha256": "50422bbda9661effc259caf8b386224cac4b5ca811d2c5b3b8b25ae8efc714db",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Trim_Metal_ORM.png",
+          "bytes": 1871475,
+          "sha256": "7407bccfc39ca74ecd68a61217395959bf56ac2063e6c93b384b11f07f5687c5",
+          "width": 2048,
+          "height": 2048
+        }
+      ],
+      "validation": "GLB readback; no external URI; all views/accessors/mesh indices/skin and animation references checked"
+    },
+    {
+      "file": "eye-drone.glb",
+      "bytes": 4691348,
+      "sha256": "ecd05a182816196b908e648123e4ecfb358dc0249e00d3532044e93f6ee60c2c",
+      "meshes": 1,
+      "materials": 1,
+      "textures": 3,
+      "skins": 1,
+      "animations": [
+        "Attack",
+        "BackFlip",
+        "Charging",
+        "Hit",
+        "Idle",
+        "Look"
+      ],
+      "roots": [
+        "Rig"
+      ],
+      "sources": [
+        {
+          "name": "Enemy_EyeDrone",
+          "pack": "Sci-Fi Essentials Kit Standard",
+          "file": "glTF/Enemy_EyeDrone.gltf",
+          "source": "https://quaternius.itch.io/sci-fi-essentials-kit",
+          "sha256": "ae39f7a2cc7698aaa774c9c84df3263d833023d69e7638e417d88e79cb3c7005",
+          "buffers": [
+            {
+              "file": "Enemy_EyeDrone.bin",
+              "bytes": 221780,
+              "sha256": "3e2006cbb5836c0bdb9e4c0d74115c5301f34150b25d5a36cc2eb98daa4ce991"
+            }
+          ],
+          "triangles": 3530,
+          "meshes": 1,
+          "skins": 1,
+          "animations": [
+            "Attack",
+            "BackFlip",
+            "Charging",
+            "Hit",
+            "Idle",
+            "Look"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "file": "T_Enemies_Normal.png",
+          "bytes": 313447,
+          "sha256": "3e1f78e93b93df32828ee9a9389665e9ccbe330065a36f365267bd9e094d2187",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Enemies_BaseColor_png.png",
+          "bytes": 1076933,
+          "sha256": "65ab96c4ed89e64d84ed453fd67dfd37027860d81b93fb2a5d5bb2e9e0e35df8",
+          "width": 2048,
+          "height": 2048
+        },
+        {
+          "file": "T_Enemies_ORM.png",
+          "bytes": 3043013,
+          "sha256": "c9b85f821df22954ca63cbeb09bc392bba4e12a3776c413886ea86b8457fd08d",
+          "width": 2048,
+          "height": 2048
+        }
+      ],
+      "validation": "GLB readback; no external URI; all views/accessors/mesh indices/skin and animation references checked"
+    }
+  ],
+  "licenses": [
+    {
+      "pack": "Fantasy Props MegaKit Standard",
+      "source": "https://quaternius.itch.io/fantasy-props-megakit",
+      "file": "License_Fantasy_Standard.txt",
+      "sha256": "edad12240087a33e08fc031e4e66c2b2b4b2a6d4f086339bde04f741b385fbda"
+    },
+    {
+      "pack": "Sci-Fi Essentials Kit Standard",
+      "source": "https://quaternius.itch.io/sci-fi-essentials-kit",
+      "file": "License_SciFi_Standard.txt",
+      "sha256": "2687fba65dca7bbd2f9ab2fb7a8c51dd0c7c8e9acd7579415612bec43f68b3f5"
+    }
+  ]
+}

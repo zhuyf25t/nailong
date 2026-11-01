@@ -1,0 +1,69 @@
+{
+  "tool": "Built-in image_gen.imagegen",
+  "purpose": "武器与技能增补的概念画面，非游戏运行截图",
+  "selected_assets": [
+    "11-weapons.png",
+    "12-skills-v2.png",
+    "13-skill-combat-v2.png"
+  ],
+  "images": [
+    {
+      "file": "11-weapons.png",
+      "prompt": "Use case: ui-mockup. Reference image 1 provides the exact garden, player identity, palette and distant gameplay camera. Create a new matching practice-range weapon-tryout screen. Keep the exact established bright cute low-poly 3D garden game style: plump YELLOW baby dinosaur, orange dorsal nubs, cream belly, blue scarf; every other dinosaur also YELLOW with only scarf colors differing. Soft but feasible simple 3D materials, grass, cream walls, wooden crates, faceted shrubs. Deep teal and warm cream UI. Landscape aspect 1.6:1, high quality legible simplified Chinese. Concept screenshot for a Three.js browser game. Do not use photorealism, dramatic AAA lighting, realistic weapons, or UI camera-mode toggles. Upper 60 percent shows the small blue-scarf yellow character (height about 16 percent of image) in the garden firing blue toy bubbles toward a round target. Lower 40 percent is a clean cream overlay with three evenly spaced weapon cards, polished readable layout. Header at upper left \"练习场\"; above cards \"试试三把枪\". Card 1 blue small single-barrel water-pistol-like \"泡泡枪\" with subtitle \"稳定连发\" and tiny straight blue projectile illustration. Card 2 orange broad round toy blaster \"散射枪\" with subtitle \"近距离更强\" and tiny fan of three orange-blue pellets. Card 3 purple rounded spring toy blaster \"弹弹枪\" with subtitle \"碰墙反弹一次\" and small L-path arrow bouncing off a cream wall. First card has teal selected border and a check, other cards neutral. Footer exact short line \"左键射击 · E 换枪\". Keep character and garden style exactly coherent with reference. This is practice UI, no economy, no price, no ratings.",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-079f423e-c300-44b2-8b83-f8d87bc00547.png",
+      "mode": "reference/edit",
+      "asset": "../assets/11-weapons.png",
+      "selected": true
+    },
+    {
+      "file": "12-skills.png",
+      "prompt": "Use case: ui-mockup. Reference image 1 is the room UI and character reference; image 2 is additional style reference. Create matching room preparation skill selection screen. Keep the exact established bright cute low-poly 3D garden game style: plump YELLOW baby dinosaur, orange dorsal nubs, cream belly, blue scarf; every other dinosaur also YELLOW with only scarf colors differing. Soft but feasible simple 3D materials, grass, cream walls, wooden crates, faceted shrubs. Deep teal and warm cream UI. Landscape aspect 1.6:1, high quality legible simplified Chinese. Concept screenshot for a Three.js browser game. Do not use photorealism, dramatic AAA lighting, realistic weapons, or UI camera-mode toggles. Main large cream rounded panel over the same garden, header \"这局带哪个技能？\" and secondary short line \"每局选择一个 · 鼠标右键释放\". Compact top row of FOUR small identical yellow dragons with blue, red, green, purple scarves, names \"奶糖\" \"小柠\" \"阿团\" \"小圆\". Below them two broad cards side by side: left card title \"泡泡盾\", illustration the blue-scarf small yellow dragon enclosed in a thin transparent cyan sphere, subtitle \"短暂吸收伤害\", selected teal border, a check and label \"已选择\". Right card title \"震震圈\", illustration the same small yellow dragon at the center of an expanding thin amber ring along ground and another red-scarf YELLOW dragon being pushed sideways one step, subtitle \"推开近身对手\", neutral border. Bottom right a single green-teal button \"准备好了\". No weapon shop, no upgrades, no skill tree, no view toggles. Names and Chinese must be legible; don't add paragraphs.",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/02-room-final.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-22fc960a-da22-4e99-8936-8c23b0b0c0da.png",
+      "mode": "reference/edit",
+      "asset": "../assets/12-skills.png",
+      "selected": false
+    },
+    {
+      "file": "13-skill-combat.png",
+      "prompt": "Use case: stylized-concept with game HUD. Reference images are garden geography, yellow dragon identity and SMALL distant follow-camera composition. Create a new matching gameplay moment demonstrating shield plus close-range scatter weapon. Keep the exact established bright cute low-poly 3D garden game style: plump YELLOW baby dinosaur, orange dorsal nubs, cream belly, blue scarf; every other dinosaur also YELLOW with only scarf colors differing. Soft but feasible simple 3D materials, grass, cream walls, wooden crates, faceted shrubs. Deep teal and warm cream UI. Landscape aspect 1.6:1, high quality legible simplified Chinese. Concept screenshot for a Three.js browser game. Do not use photorealism, dramatic AAA lighting, realistic weapons, or UI camera-mode toggles. Camera follows small blue-scarf yellow dragon at bottom center, character no more than 18 percent frame height. At foot of a cream ramp beside a wooden crate, blue player has a THIN transparent cyan spherical bubble shield surrounding body, clearly readable and not obscuring aim. It holds an orange broad round toy scatter blaster, fires exactly a small fan of three soft blue-orange toy pellets toward a nearby red-scarf YELLOW opponent farther ahead to the right; one incoming small projectile makes a tiny spark on the shield's right side. Opponent at distance, no collision or gore. Garden remains open and readable with ramps/walls/shrubs. Only one active player shield, modest glow, ordinary feasible 3D transparency. Top left \"花园乱斗\", top center \"01:28\", top right gear. Bottom left health80. Bottom right two compact cream/teal HUD tiles: orange scatter-blaster icon \"散射枪\"; blue shield icon with dim cooldown arc and text \"泡泡盾 8s\". Lower middle tiny control hints \"左键 射击 · 右键 技能 · SPACE 冲刺\". Visible white aim ring points at red opponent. No huge closeup, no sky explosions, no held scope, no additional UI modes.",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-final.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-a58c997a-9004-4803-8407-a39c94da0ec1.png",
+      "mode": "reference/edit",
+      "asset": "../assets/13-skill-combat.png",
+      "selected": false
+    },
+    {
+      "file": "12-skills-v2.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/12-skills.png"
+      ],
+      "prompt": "Use case: precise-object-edit. Edit only the small illustration within the RIGHT skill card in this image. The red-scarf yellow dragon must be pushed HORIZONTALLY along the ground, feet touching ground in a sliding pose with a tiny dust streak; do NOT show the red dinosaur flying, leaping or floating. Keep it on the same ground level. Keep every other pixel/composition element as close as possible: all Chinese text, exact character identities, left shield card, four dragons at top, all controls and layout, original 1.6:1 aspect ratio. Keep the adorable low-poly garden style. No new text.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-e4de89cf-2cbb-4108-801f-22e3f7968644.png",
+      "mode": "reference/edit",
+      "asset": "../assets/12-skills-v2.png",
+      "selected": true
+    },
+    {
+      "file": "13-skill-combat-v2.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/13-skill-combat.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/11-weapons.png"
+      ],
+      "prompt": "Use case: precise-object-edit. Image1 is the edit target. Image2 is a weapon appearance reference only: use the orange broad round SCATTER BLASTER from its middle card. In image1 change ONLY the foreground blue-scarf yellow player plus their shield/gun and outgoing projectiles as follows: make player about 30 percent smaller than it is now (head-to-feet height about 17 to 18 percent of full image height), keeping feet near the same bottom-central ground spot; shrink shield around player proportionally, leaving readable clear blue surface and small incoming-hit sparkle. The player holds the ORANGE broad short round-barrel toy scatter blaster matching middle card in reference image2, NOT a narrow blue bubble gun. Exactly three small outgoing pellets spread from the gun muzzle toward the distant red-scarf opponent. Keep the garden, ramp, crate, camera orientation, enemy, all HUD/text/health/timer/skill cooldown, palette, render style and aspect ratio of image1 unchanged. Do not bring camera closer or enlarge character; small character and visible terrain are important.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-9d92e764-599c-4edb-b7e0-dee0bf140909.png",
+      "mode": "reference/edit",
+      "asset": "../assets/13-skill-combat-v2.png",
+      "selected": true
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "pages": 10,
+  "landscape": true,
+  "text_issues": [],
+  "visually_reviewed_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "original_pdf_unchanged": true,
+  "original_source_unchanged": true,
+  "readme_written_by_this_task": false,
+  "readme_note": "README now differs from the initial baseline; this task issued no writes to it.",
+  "project_image_count": 4,
+  "pdf_bytes": 12128255,
+  "pdf_sha256": "352DE250D81FAA814C869E0C807E4FEE2146F5BC0EF248F4956F6614227D3C13"
+}

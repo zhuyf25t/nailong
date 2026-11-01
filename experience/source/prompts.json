@@ -1,0 +1,195 @@
+{
+  "tool": "Built-in image_gen.imagegen",
+  "purpose": "奶龙竞技场体验图册：概念画面，非游戏运行截图",
+  "style": "黄色小龙、围巾配色、低面数花园；远距跟随镜头与可见鼠标",
+  "selected_assets": [
+    "01-arrival.png",
+    "05-thirdperson-small.png",
+    "06-camera-progressive.png",
+    "02-room-final.png",
+    "07-height-final.png",
+    "08-respawn-final.png",
+    "09-settings-final.png",
+    "10-results.png",
+    "02-practice.png"
+  ],
+  "images": [
+    {
+      "file": "02-practice.png",
+      "prompt": "Use case: ui-mockup / stylized-concept. Create ONE landscape 16:10 game screenshot concept for a modest, achievable Three.js browser arena shooter. This will appear on the LEFT of a Chinese PDF describing a first-time player's journey. It is a proposed game screen, not a cinematic illustration.\nSCENE: a compact outdoor practice corner of a small mint-green playground arena, viewed from a fixed elevated three-quarter / top-down camera, 50 degrees downward. Orthographic-like perspective, ground fills the image. Short cream rectangular walls, two wood crates, one red/white circular target on a simple stand, a few low polygon round bushes at the edge. Clear walking space and visible paths. No buildings or complex architecture.\nPLAYER: a cute Nailong-inspired chubby bright yellow baby dinosaur, big oval belly, short tiny arms, short legs, tiny tail, rounded head, large simple black eyes, open cheerful mouth, small pale belly patch. Simple low-poly rounded mesh, no fur, no clothing except a BLUE neckerchief identifying the player. Character height about 7 percent of screenshot. It holds a small toy bubble blaster. One visible round cyan projectile travels toward the target. A green flat circular player marker under the character.\nSTYLE: plausible indie student-project real-time 3D screenshot. Low-poly meshes, flat pastel materials, one directional daylight, simple contact/blob shadows. Crisp geometry. No ray tracing, no photorealism, no cinematic depth of field, no volumetric fog, no huge particle effects, no fancy water, no detailed vegetation. Cheerful but restrained, very readable gameplay.\nUI: minimal clean actual game HUD. Top left a small rounded dark teal badge with exactly “练习场”. Bottom left a simple health bar and “100”. Bottom center a compact key hint with exactly “W A S D” and “移动”, then a mouse icon and “射击”, then “SPACE” and “冲刺”. Top right a small gear icon. No browser chrome, no extra text, no paragraph, no large title, no watermark. All text sharp and legible.\nKeep the entire screen in a usable screenshot composition, no poster framing.",
+      "mode": "generate",
+      "asset": "../assets/02-practice.png",
+      "selected": true
+    },
+    {
+      "file": "01-arrival.png",
+      "prompt": "Use case: ui-mockup. Reference image is the VISUAL STYLE and CHARACTER reference. Create one new 16:10 landscape screenshot concept of the SAME modest Three.js browser arena game. Preserve the exact cute chubby yellow baby dinosaur with blue neckerchief, simple black oval eyes, small pale belly, tiny tail; mint/grass green garden floor, cream low walls, low polygon bushes, wooden crates, cyan toy bubble projectiles, dark-teal rounded minimal UI. Same pastel flat materials, low-poly meshes, one daylight source and simple contact shadows. Achievable student-project real-time rendering. No cinematic lighting, photorealism, raytracing, depth of field, fog, ornate scenery, massive particle effects or AAA open-world vista. No browser chrome, no watermark. SCENE: game welcome screen. On the left two-thirds a closer simple real-time 3D preview of our yellow dinosaur standing on a circular plain grass patch beside one wooden crate and a small red-white practice target, cheerfully holding the small cyan toy blaster. On the right a narrow clean cream panel with heading exactly “奶龙小竞技场”, a small name entry exactly “奶糖”, a prominent teal button exactly “先练一会”, second button exactly “和朋友玩”, and a small gear button exactly “设置”. Keep layout deliberately sparse and legible, lots of empty space. The game should look immediately playable, not like a store or promotional poster. This is the entrance to the same garden as reference.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-a0db8e72-1474-4898-85f5-54c08cdfa6e2.png",
+      "mode": "reference edit",
+      "asset": "../assets/01-arrival.png",
+      "selected": true
+    },
+    {
+      "file": "02-room.png",
+      "prompt": "Use case: ui-mockup. Reference image is the VISUAL STYLE and CHARACTER reference. Create one new 16:10 landscape screenshot concept of the SAME modest Three.js browser arena game. Preserve the exact cute chubby yellow baby dinosaur with blue neckerchief, simple black oval eyes, small pale belly, tiny tail; mint/grass green garden floor, cream low walls, low polygon bushes, wooden crates, cyan toy bubble projectiles, dark-teal rounded minimal UI. Same pastel flat materials, low-poly meshes, one daylight source and simple contact shadows. Achievable student-project real-time rendering. No cinematic lighting, photorealism, raytracing, depth of field, fog, ornate scenery, massive particle effects or AAA open-world vista. No browser chrome, no watermark. SCENE: a simple friends room screen, the same garden shown softly but sharply behind a flat cream UI panel. Four copies of the SAME yellow dinosaur mesh stand in a row in a modest real-time 3D preview, identified by BLUE, CORAL, GREEN and PURPLE neckerchiefs, no different body types. Under them four clear short labels exactly “奶糖”, “小柠”, “阿团”, “小圆”. Header exactly “朋友房间”; top-right code exactly “A7K2”. Small strip says exactly “复制邀请链接”. Bottom two large mutually exclusive view choices exactly “斜俯视” and “第三人称”, with “斜俯视” selected in teal. A simple accent-color selector under the BLUE player's slot. Bottom right large button exactly “准备好了”. Some slots have tiny checkmarks. No loadouts, inventory, marketplace, network fields or complex settings. Friendly readable practical game UI.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-efadc849-631c-483a-8ec7-0f90b655fa9d.png",
+      "mode": "reference edit",
+      "asset": "../assets/02-room.png",
+      "selected": false
+    },
+    {
+      "file": "04-overhead-fight.png",
+      "prompt": "Use case: ui-mockup. Reference image is the VISUAL STYLE and CHARACTER reference. Create one new 16:10 landscape screenshot concept of the SAME modest Three.js browser arena game. Preserve the exact cute chubby yellow baby dinosaur with blue neckerchief, simple black oval eyes, small pale belly, tiny tail; mint/grass green garden floor, cream low walls, low polygon bushes, wooden crates, cyan toy bubble projectiles, dark-teal rounded minimal UI. Same pastel flat materials, low-poly meshes, one daylight source and simple contact shadows. Achievable student-project real-time rendering. No cinematic lighting, photorealism, raytracing, depth of field, fog, ornate scenery, massive particle effects or AAA open-world vista. No browser chrome, no watermark. SCENE: actual fixed elevated top-down arena action screenshot, zoomed OUT to show four small characters (each height 6-8% of frame) and the walkable arena. Same floor/walls/boxes, a central L-shaped cream wall and a small round green pickup pad with a white milk bottle, a separate pad with a chunky two-barrel toy scatter blaster. BLUE scarf player at lower left is moving around the end of a low wall; CORAL scarf opponent at center right shoots two cyan bubbles along a clear line; GREEN and PURPLE players are farther in the background. Make cover, a safer outer route and a direct contested route readable. A few cyan bubbles, one tiny hit star, no huge effects. Top center HUD “02:16”. Bottom left health bar “65”. Bottom center small “SPACE 冲刺” key hint and toy-blaster icon. Top right small score “2”. No oversized minimap. This is the 2.5D-feeling camera variant, a genuine rendered 3D arena from fixed high camera.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-0e53a67d-80ed-4ad5-be0b-34b88057a403.png",
+      "mode": "reference edit",
+      "asset": "../assets/04-overhead-fight.png",
+      "selected": false
+    },
+    {
+      "file": "05-thirdperson.png",
+      "prompt": "Use case: ui-mockup. Reference image is the VISUAL STYLE and CHARACTER reference. Create one new 16:10 landscape screenshot concept of the SAME modest Three.js browser arena game. Preserve the exact cute chubby yellow baby dinosaur with blue neckerchief, simple black oval eyes, small pale belly, tiny tail; mint/grass green garden floor, cream low walls, low polygon bushes, wooden crates, cyan toy bubble projectiles, dark-teal rounded minimal UI. Same pastel flat materials, low-poly meshes, one daylight source and simple contact shadows. Achievable student-project real-time rendering. No cinematic lighting, photorealism, raytracing, depth of field, fog, ornate scenery, massive particle effects or AAA open-world vista. No browser chrome, no watermark. SCENE: change the camera fundamentally to a real THIRD-PERSON FOLLOW CAMERA behind and slightly above the BLUE scarf dinosaur, close to character eye height, like a modest 3D action game's camera. The dinosaur's BACK occupies the lower center about 22% of frame height, its blue scarf and tail visible. The camera looks FORWARD across the SAME garden practice area, not downward from an isometric perspective. Ground recedes in clear perspective toward a cream low wall and a red-white target ahead. Several bushes and a crate at side establish distance; show a small patch of pale blue sky above the far boundary wall. One simple ramp on the far right leads to a raised low platform, no mountains or big architecture. The player holds the toy blaster forward. A tiny white crosshair in the screen center. Top left “练习场”. Bottom left health “100”. Bottom center “W A S D 移动” and “SPACE 冲刺”. Top right gear. This must unmistakably be an actual third-person over-the-back videogame camera, NOT an isometric shot, NOT a character portrait.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-d727611f-ef0d-468e-9c6b-5bcfa198ca88.png",
+      "mode": "reference edit",
+      "asset": "../assets/05-thirdperson.png",
+      "selected": false
+    },
+    {
+      "file": "05-thirdperson-small.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson.png"
+      ],
+      "prompt": "Edit this game screenshot while preserving the SAME yellow dinosaur, blue scarf, garden practice area, cream walls, red target, wooden crates, low-poly green bushes, pastel flat materials and simple daylight. Main change: pull the third-person camera BACK substantially so the dinosaur is SMALL, only 14 to 17 percent of image height, lower center of screen; the current dinosaur is far too large. Show much more playable ground and surrounding arena, keep a forward-facing third-person perspective with horizon and sky, NOT an overhead or isometric view. Camera looks gently down from behind, broad 65 degree field of view. Keep the distant red target, ramp right, crate left. Remove fixed center crosshair. Instead show a small unobtrusive WHITE RING MOUSE CURSOR near the practice target (free mouse aiming). Remove current projectile trail, this is standing and looking. HUD stays sparse: “练习场”, gear, health “100”, “W A S D 移动”, “SPACE 冲刺”. No other text. Realistic feasible modest Three.js screenshot, no cinematic effects. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-ae5e74c4-3c13-4467-9808-b03faec0ab5b.png",
+      "mode": "reference edit",
+      "asset": "../assets/05-thirdperson-small.png",
+      "selected": true
+    },
+    {
+      "file": "04-overhead-fight-v2.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/04-overhead-fight.png"
+      ],
+      "prompt": "Precise small correction to this image only. Keep camera, framing, map geometry, walls, pickups, positions, HUD and lighting exactly unchanged. The CORAL character at middle right, GREEN character at upper left and PURPLE character at upper right must all have the SAME bright YELLOW body and orange dorsal bumps as the blue-scarf player. Only their neckerchiefs remain coral, green, purple respectively. All four characters are the same yellow species, never differently colored bodies. Preserve everything else. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-3d6aca03-35c0-4850-9f01-e171249c12a7.png",
+      "mode": "reference edit",
+      "asset": "../assets/04-overhead-fight-v2.png",
+      "selected": false
+    },
+    {
+      "file": "10-results.png",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/02-practice.png",
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/02-room.png"
+      ],
+      "prompt": "Create a simple end-of-match screen for the SAME modest browser game as reference. Same low polygon pastel green garden with cream walls, tiny simple shadows and wooden crates behind UI. Four same YELLOW chubby baby dinosaurs, different blue, coral, green, purple neckerchiefs, no recolored bodies. BLUE player has an amusing pleased expression, CORAL winner waves, not elaborate victory poses. Clean small cream centered results panel, heading exactly “这一局，打得不错”. Very legible compact scoreboard with columns “玩家” “击倒” “倒地”; four rows exactly “小柠  7  3”, “奶糖  5  4”, “阿团  4  5”, “小圆  3  7”. Highlight 奶糖 row in pale teal. Bottom buttons exactly “再来一局” and “回练习场”. Tiny bottom secondary link exactly “最近对局”. No currency, rewards, progression bar, lootbox, medals, no ornate fantasy interface. An approachable game screen, not a poster. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-1c7e9d23-0ad9-4404-ba53-0fc1618e0fa4.png",
+      "mode": "reference edit",
+      "asset": "../assets/10-results.png",
+      "selected": true
+    },
+    {
+      "file": "06-edge-camera.png",
+      "prompt": "Use the reference as strict visual and camera-scale reference. One 16:10 landscape screenshot concept of this modest Three.js game: SAME small yellow chubby dinosaur with BLUE scarf at lower center, body height only 14-17 percent of frame, same green low-poly garden, cream rectangular low walls, wooden crates, faceted round bushes, simple daylight and pastel flat materials. THIRD-PERSON camera looks forward from behind the small character, clear perspective and some sky, not overhead. Other players must also be YELLOW bodies with orange bumps and different colored scarves. Keep UI practical, text sharp, effects minimal. No cinematic or AAA rendering. Create an annotated CONTROL TUTORIAL view based closely on the reference garden layout. Keep the character and red target, white circular free-aim cursor. Add a very subtle translucent teal border strip only at the TOP and BOTTOM edges, approximately 6% of height each, to illustrate edge-triggered camera pitch. Add small simple arrows up at top edge and down at bottom edge. Put a WHITE mouse arrow in the top strip, and a small text label “抬头” near it. A thin teal dashed rounded rectangle outlines the large stable central region; small centered label exactly “中央区域：只瞄准”. Bottom strip label exactly “低头”. Left/right edge tiny curved-arrow icons imply optional turning. All annotations look like an instructional overlay, not gigantic callouts. The game scene remains highly visible. Existing HUD may remain. Do not move the character closer or enlarge it. No center crosshair; visible mouse cursor is the aim.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-0fe5c97c-378d-4469-a008-d07a277dd4c1.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "asset": "../assets/06-edge-camera.png",
+      "selected": false
+    },
+    {
+      "file": "07-height-play.png",
+      "prompt": "Use the reference as strict visual and camera-scale reference. One 16:10 landscape screenshot concept of this modest Three.js game: SAME small yellow chubby dinosaur with BLUE scarf at lower center, body height only 14-17 percent of frame, same green low-poly garden, cream rectangular low walls, wooden crates, faceted round bushes, simple daylight and pastel flat materials. THIRD-PERSON camera looks forward from behind the small character, clear perspective and some sky, not overhead. Other players must also be YELLOW bodies with orange bumps and different colored scarves. Keep UI practical, text sharp, effects minimal. No cinematic or AAA rendering. SCENE: the player has walked up the simple ramp on the RIGHT side of the same garden and is now on a small raised grassy platform. Camera remains behind the SMALL BLUE-scarf yellow player and looks forward and gently downward across the arena. Clearly show the cream ramp sloping down at left and the vertical edge of the platform in foreground, a lower garden courtyard with two wood crates and a cream L-shaped low wall, and a SMALL YELLOW opponent wearing CORAL scarf behind a crate below. A single cyan bubble from player travels downward toward the lower courtyard, target indicated by small white ring mouse cursor, NOT center crosshair. There is a milk-bottle pickup on the platform near the path and a toy scatter-blaster pickup below. One simple hit spark, no big effects. Top center timer “01:42”, health bottom left “80”, bottom “SPACE 冲刺”. This should demonstrate genuine height and aiming up/down, not flying, jumping, an open world or an isometric diorama.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-e7981236-3488-4266-8e4a-0693b2eb8d10.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "asset": "../assets/07-height-play.png",
+      "selected": false
+    },
+    {
+      "file": "08-respawn.png",
+      "prompt": "Use the reference as strict visual and camera-scale reference. One 16:10 landscape screenshot concept of this modest Three.js game: SAME small yellow chubby dinosaur with BLUE scarf at lower center, body height only 14-17 percent of frame, same green low-poly garden, cream rectangular low walls, wooden crates, faceted round bushes, simple daylight and pastel flat materials. THIRD-PERSON camera looks forward from behind the small character, clear perspective and some sky, not overhead. Other players must also be YELLOW bodies with orange bumps and different colored scarves. Keep UI practical, text sharp, effects minimal. No cinematic or AAA rendering. SCENE: same third-person garden arena at ground level beside the same ramp and cream wall. The small BLUE-scarf yellow player has just been harmlessly knocked down, comically sitting/flopped on its round belly on the grass at lower center, no blood, no injury. One or two small stylized stars above its head. In the mid-distance a SMALL YELLOW opponent with CORAL scarf runs around a crate, no body color change. Keep the ground, bushes, walls and lighting consistent. A modest dark-teal translucent banner at upper center reads exactly “被小柠击倒”; beneath it exactly “3 秒后重生”. Bottom left empty health bar “0”. A faint circular spawn pad visible at a safe corner in distance. No large sad face, no defeat screen covering the view. Camera height and small character scale match reference.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-bb1ad468-2fef-4363-8c4d-6c87d86ac849.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "asset": "../assets/08-respawn.png",
+      "selected": false
+    },
+    {
+      "file": "09-settings.png",
+      "prompt": "Use the reference as strict visual and camera-scale reference. One 16:10 landscape screenshot concept of this modest Three.js game: SAME small yellow chubby dinosaur with BLUE scarf at lower center, body height only 14-17 percent of frame, same green low-poly garden, cream rectangular low walls, wooden crates, faceted round bushes, simple daylight and pastel flat materials. THIRD-PERSON camera looks forward from behind the small character, clear perspective and some sky, not overhead. Other players must also be YELLOW bodies with orange bumps and different colored scarves. Keep UI practical, text sharp, effects minimal. No cinematic or AAA rendering. SCENE: same garden behind a clean cream settings panel on the center-right of screenshot, while the SMALL BLUE scarf yellow player stands behind a crate at lower left. Panel heading exactly “设置”. Rows: “画质” with choices “低  中  高”, highlight “低”; “音量” with a simple slider; “边缘转向速度” with a simple slider; “本局视角：第三人称” in small text. Bottom button exactly “继续游戏”. Small notice exactly “联机对局仍在进行”. Keep screen uncluttered, no account or technical settings. No cursor lock imagery. Background remains crisp and consistent, no artificial depth of field.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-d99432ee-c38d-449f-a149-0c285eca9415.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/05-thirdperson-small.png"
+      ],
+      "asset": "../assets/09-settings.png",
+      "selected": false
+    },
+    {
+      "file": "02-room-final.png",
+      "ref": "02-room.png",
+      "prompt": "Precise UI edit of this image. Keep the entire art style, FOUR YELLOW dinosaurs, their blue/coral/green/purple scarves, names, room title, invitation code and Ready button unchanged. REMOVE the two bottom camera mode buttons “斜俯视” and “第三人称”. In their place put a single small noninteractive text line “花园乱斗 · 3 分钟” with a simple leaf icon. There is NO camera-view selection or toggle in this game. Preserve the original clean cream layout and all other details. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-004c9900-18b8-4a1b-aa46-44999a7c77a8.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/02-room.png"
+      ],
+      "asset": "../assets/02-room-final.png",
+      "selected": true
+    },
+    {
+      "file": "06-camera-progressive.png",
+      "ref": "06-edge-camera.png",
+      "prompt": "Edit this same game tutorial screenshot. Keep SMALL character scale, garden, 4 yellow characters and low-poly style. Change the instructional overlay to accurately explain a CENTRAL STABLE REGION and PROGRESSIVE OUTER CAMERA TURNING. Move the dashed central rounded rectangle inward so it occupies about 70% of frame width and 60% of frame height, centered. Outside it use very subtle translucent teal shading with a gentle gradient increasing toward screen edges. TOP label “抬头”, BOTTOM label “低头”, LEFT “左转”, RIGHT “右转”. Replace center label with exactly “中央：瞄准，镜头不转”. Add a small concise unobtrusive label near the upper right exactly “外围：越远越快，有上限”. Add another small line near the lower center exactly “全区都能射击”. Show one white arrow mouse cursor just outside the central rectangle at upper right and TWO cyan bubbles leaving the BLUE player's gun toward a visible target: shooting is allowed while turning camera. No zones labeled forbidden or disabled. The gradient is a tutorial explanation overlay only. Keep art readable; do not enlarge characters, no cinematic effects, landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-49654844-294a-4549-8f13-a17ef1136ddc.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/06-edge-camera.png"
+      ],
+      "asset": "../assets/06-camera-progressive.png",
+      "selected": true
+    },
+    {
+      "file": "07-height-final.png",
+      "ref": "07-height-play.png",
+      "prompt": "Make only one UI text change to this same game screenshot. Change the top-left badge text from “练习场” to exactly “花园乱斗”. Keep the timer, small player, low-poly map, ramp, milk pickup, gun pickup, all characters, effects, camera, colors and lighting unchanged. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-b4ef2162-e400-4f8c-a8e0-eed08844745b.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/07-height-play.png"
+      ],
+      "asset": "../assets/07-height-final.png",
+      "selected": true
+    },
+    {
+      "file": "08-respawn-final.png",
+      "ref": "08-respawn.png",
+      "prompt": "Make only one UI text change to this same screenshot. Change the top-left badge from “练习场” to exactly “花园乱斗”. Preserve the same small fallen yellow dragon, blue scarf, death countdown, 0 health, respawn pad, camera, map, other yellow character and all artwork. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-6a515a1c-e70c-417c-932f-ead2c4003768.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/08-respawn.png"
+      ],
+      "asset": "../assets/08-respawn-final.png",
+      "selected": true
+    },
+    {
+      "file": "09-settings-final.png",
+      "ref": "09-settings.png",
+      "prompt": "Edit this screenshot UI precisely. Preserve same small yellow characters, simple garden, pastel material, camera and cream settings panel. Top-left badge should say exactly “花园乱斗” instead of “练习场”. DELETE the line “本局视角：第三人称” completely, leaving natural breathing room. Keep rows “画质” with “低 中 高”, “音量”, “边缘转向速度”, and button “继续游戏”, notice “联机对局仍在进行”. Change bright BLUE selected button and sliders to muted dark TEAL / mint, matching the game's earlier menus. No view-switch buttons, no extra settings. Landscape 16:10.",
+      "source": "D:\\.codex-slaydemo\\generated_images\\01a188b1-d96f-7e91-b8d4-71bdf8f6da57\\exec-9b71cf32-9caa-44c5-a360-58fa8ba85a57.png",
+      "mode": "reference edit",
+      "refs": [
+        "F:/AstraBel/curriculum/无代码/nailong/experience/assets/09-settings.png"
+      ],
+      "asset": "../assets/09-settings-final.png",
+      "selected": true
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+[repositories]
+local
+maven-central: https://repo.maven.apache.org/maven2/
+sbt-plugin-releases: https://repo.scala-sbt.org/scalasbt/sbt-plugin-releases/, [ivy]
