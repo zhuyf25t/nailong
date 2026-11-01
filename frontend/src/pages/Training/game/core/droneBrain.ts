@@ -31,10 +31,13 @@ export type DroneBrain = {
   lostSightTime: number;
   /** Updated only with a visible observation; a hidden player is never tracked. */
   lastSeen: DronePoint | null;
+  /** A distraction is an investigation point, never a player lock. */
+  investigate: DronePoint | null;
   readonly initialYaw: number;
   readonly initialTurnDirection: -1 | 1;
   readonly initialDirectionDuration: number;
   readonly rng: () => number;
+  readonly resetRandom?: () => void;
 };
 
 export type DroneObservation = {
@@ -42,6 +45,8 @@ export type DroneObservation = {
   player: DronePoint;
   /** Supply terrain/obstacle visibility here; the brain never imports rendering code. */
   hasLineOfSight?: DroneLineOfSight;
+  /** Caller verifies attraction range and physical visibility. */
+  decoy?: DronePoint | null;
 };
 
 function randomUnit(rng: () => number) {
@@ -59,17 +64,34 @@ export function canDroneDetect(position: DronePoint, yaw: number, player: DroneP
   return hasLineOfSight?.(position, player) ?? true;
 }
 
-export function createDroneBrain(options: { yaw?: number; rng?: () => number; rules?: DroneRules } = {}): DroneBrain {
+/** Per-drone stream avoids changing one patrol when another drone is destroyed. */
+export function createSeededDroneRandom(seed: number, stream: string | number = 0) {
+  let initial = seed >>> 0;
+  for (const char of String(stream)) initial = Math.imul(initial ^ char.charCodeAt(0), 16777619) >>> 0;
+  let state = initial;
+  const random = () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+  return Object.assign(random, { reset() { state = initial; } });
+}
+
+export function createDroneBrain(options: { yaw?: number; rng?: () => number; rules?: DroneRules; seed?: number; stream?: string | number } = {}): DroneBrain {
   const rules = options.rules ?? DEFAULT_DRONE_RULES;
-  const rng = options.rng ?? Math.random;
+  const seeded = options.seed === undefined ? undefined : createSeededDroneRandom(options.seed, options.stream);
+  const rng = options.rng ?? seeded ?? Math.random;
   const yaw = Number.isFinite(options.yaw) ? wrapAngle(options.yaw!) : 0;
   const turnDirection = randomUnit(rng) < 0.5 ? -1 : 1;
   const directionDuration = 1.5 + randomUnit(rng) * 2.5;
   return {
     state: 'scanning', hp: rules.maxHp, maxHp: rules.maxHp, rules, yaw,
     turnDirection, directionRemaining: directionDuration,
-    alertRemaining: 0, acquireDelay: 0, lostSightTime: 0, lastSeen: null,
+    alertRemaining: 0, acquireDelay: 0, lostSightTime: 0, lastSeen: null, investigate: null,
     initialYaw: yaw, initialTurnDirection: turnDirection, initialDirectionDuration: directionDuration, rng,
+    resetRandom: options.rng || !seeded ? undefined : () => { seeded.reset(); seeded(); seeded(); },
   };
 }
 
@@ -92,6 +114,7 @@ function lockPlayer(brain: DroneBrain, observation: DroneObservation) {
   brain.acquireDelay = 0;
   brain.lostSightTime = 0;
   brain.lastSeen = { ...observation.player };
+  brain.investigate = null;
 }
 
 /**
@@ -103,6 +126,7 @@ export function updateDroneBrain(brain: DroneBrain, dt: number, observation: Dro
   if (brain.state === 'destroyed' || !Number.isFinite(dt) || dt <= 0) return brain;
   let remaining = dt;
   while (remaining > EPSILON) {
+    brain.investigate = null;
     const angularSpeed = brain.state === 'alert' ? brain.rules.alertSpeed : brain.rules.scanSpeed;
     const angularStep = angularSpeed > 0 ? brain.rules.scanFovDegrees * Math.PI / 180 / (angularSpeed * 4) : MAX_SUBSTEP;
     let step = Math.min(remaining, MAX_SUBSTEP, angularStep);
@@ -127,6 +151,19 @@ export function updateDroneBrain(brain: DroneBrain, dt: number, observation: Dro
       // Test before and after the turn, including the cone visible at frame start.
       if (brain.acquireDelay <= EPSILON && canDroneDetect(observation.position, brain.yaw, observation.player, observation.hasLineOfSight, brain.rules)) {
         lockPlayer(brain, observation);
+      } else if (observation.decoy && brain.acquireDelay <= EPSILON) {
+        // A real observation wins. An occluded lock first keeps its last-seen
+        // pursuit until the usual lost-sight timer has entered search mode.
+        brain.investigate = { ...observation.decoy };
+        brain.yaw = Math.atan2(observation.decoy.x - observation.position.x, observation.decoy.z - observation.position.z);
+        if (canDroneDetect(observation.position, brain.yaw, observation.player, observation.hasLineOfSight, brain.rules)) lockPlayer(brain, observation);
+        if (brain.state === 'alert') {
+          brain.alertRemaining = Math.max(0, brain.alertRemaining - step);
+          if (brain.alertRemaining <= EPSILON) { brain.state = 'scanning'; chooseScanDirection(brain); }
+        } else if (brain.state === 'scanning') {
+          brain.directionRemaining = Math.max(0, brain.directionRemaining - step);
+          if (brain.directionRemaining <= EPSILON) chooseScanDirection(brain);
+        }
       } else {
         const alert = brain.state === 'alert';
         brain.yaw = wrapAngle(brain.yaw + brain.turnDirection * angularSpeed * step);
@@ -172,6 +209,6 @@ export function resetDroneBrain(brain: DroneBrain, yaw = brain.initialYaw): Dron
   brain.turnDirection = brain.initialTurnDirection;
   brain.directionRemaining = brain.initialDirectionDuration;
   brain.alertRemaining = 0; brain.acquireDelay = 0; brain.lostSightTime = 0;
-  brain.lastSeen = null;
+  brain.lastSeen = null; brain.investigate = null; brain.resetRandom?.();
   return brain;
 }

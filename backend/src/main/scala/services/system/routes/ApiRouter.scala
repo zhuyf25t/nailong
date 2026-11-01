@@ -10,6 +10,7 @@ import services.player.api.ResolvePlayerTokenAPIMessage
 import services.player.routes.PlayerRoutes
 import services.records.routes.RecordsRoutes
 import services.training.routes.TrainingRoutes
+import services.worlds.routes.WorldsRoutes
 import services.system.DatabaseSession
 import services.system.api.APIMessageRouter
 import services.system.objects.HealthResponse
@@ -24,7 +25,7 @@ object ApiRouter:
         }.handleErrorWith(_ => ServiceUnavailable(HealthResponse("unavailable", "nailong-backend").asJson))
     }
     val api = APIMessageRouter.routes(
-      PlayerRoutes.apiMessages ++ TrainingRoutes.apiMessages ++ RecordsRoutes.apiMessages,
+      PlayerRoutes.apiMessages ++ TrainingRoutes.apiMessages ++ WorldsRoutes.apiMessages ++ RecordsRoutes.apiMessages,
       database,
       (token, connection) => ResolvePlayerTokenAPIMessage(token).plan(connection)
     )

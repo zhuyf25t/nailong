@@ -9,10 +9,10 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.util.Using
 import services.player.objects.PlayerId
-import services.training.objects.{RunId, TerrainConfig, TrainingConfig, TrainingRun, TrainingRunStatus}
+import services.training.objects.{RunId, RunSelection, RunSetup, TerrainConfig, TrainingConfig, TrainingRun, TrainingRunStatus}
 
 object TrainingRunTable:
-  private val columns = "id, player_id, request_id, config_json, terrain_json, status, started_at, completed_at"
+  private val columns = "id, player_id, request_id, config_json, terrain_json, setup_json, status, started_at, completed_at"
 
   private val findOwnedSql = s"select $columns from training_runs where player_id = ? and id = ?"
 
@@ -38,10 +38,26 @@ object TrainingRunTable:
       statement.setObject(2, requestId)
     }
 
+  private val requestSelectionSql = "select selection_json from training_runs where player_id = ? and request_id = ?"
+
+  /** Only called after a run was found; null means the original request used the legacy contract. */
+  def requestSelection(connection: Connection, playerId: PlayerId, requestId: UUID): IO[Option[RunSelection]] = IO.blocking {
+    Using.resource(connection.prepareStatement(requestSelectionSql)) { statement =>
+      statement.setObject(1, playerId.value)
+      statement.setObject(2, requestId)
+      Using.resource(statement.executeQuery()) { rows =>
+        if !rows.next() then throw new IllegalStateException("Run request disappeared before idempotency comparison")
+        Option(rows.getString("selection_json")).map { json =>
+          decode[RunSelection](json).fold(error => throw new IllegalStateException("Stored run selection is invalid", error), identity)
+        }
+      }
+    }
+  }
+
   private val insertIfAbsentSql =
     s"""insert into training_runs
-      |(id, player_id, request_id, config_id, config_version, config_json, terrain_json, status, started_at)
-      |values (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, 'open', ?)
+      |(id, player_id, request_id, config_id, config_version, config_json, terrain_json, status, started_at, setup_json, selection_json)
+      |values (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, 'open', ?, ?::jsonb, ?::jsonb)
       |on conflict (player_id, request_id) do nothing returning $columns""".stripMargin
 
   /** ON CONFLICT waits for a competing insert; callers then read and compare the winning request. */
@@ -50,7 +66,9 @@ object TrainingRunTable:
     playerId: PlayerId,
     requestId: UUID,
     config: TrainingConfig,
-    terrain: TerrainConfig
+    terrain: TerrainConfig,
+    setup: Option[RunSetup] = None,
+    selection: Option[RunSelection] = None
   ): IO[Option[TrainingRun]] =
     for
       id <- IO(UUID.randomUUID())
@@ -64,6 +82,8 @@ object TrainingRunTable:
         statement.setString(6, config.asJson.noSpaces)
         statement.setString(7, terrain.asJson.noSpaces)
         statement.setTimestamp(8, Timestamp.from(startedAt))
+        statement.setString(9, setup.map(_.asJson.noSpaces).orNull)
+        statement.setString(10, selection.map(_.asJson.noSpaces).orNull)
       }
     yield run
 
@@ -104,6 +124,9 @@ object TrainingRunTable:
       .fold(error => throw new IllegalStateException("Stored run terrain is invalid", error), identity)
     val status = TrainingRunStatus.fromString(rows.getString("status"))
       .fold(error => throw new IllegalStateException(error), identity)
+    val setup = Option(rows.getString("setup_json")).map { json =>
+      decode[RunSetup](json).fold(error => throw new IllegalStateException("Stored run setup is invalid", error), identity)
+    }
     TrainingRun(
       RunId(rows.getObject("id", classOf[UUID])),
       PlayerId(rows.getObject("player_id", classOf[UUID])),
@@ -112,5 +135,6 @@ object TrainingRunTable:
       terrain,
       status,
       rows.getTimestamp("started_at").toInstant,
-      Option(rows.getTimestamp("completed_at")).map(_.toInstant)
+      Option(rows.getTimestamp("completed_at")).map(_.toInstant),
+      setup
     )

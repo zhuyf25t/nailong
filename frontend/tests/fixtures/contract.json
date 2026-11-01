@@ -136,7 +136,8 @@
     },
     "status": "open",
     "startedAt": "2026-11-01T12:01:00Z",
-    "completedAt": null
+    "completedAt": null,
+    "setup": null
   },
   "submission": {
     "outcome": "victory",
@@ -163,7 +164,9 @@
     "destroyed": 4,
     "elapsedMs": 24000,
     "accuracy": 0.75,
-    "submittedAt": "2026-11-01T12:01:24Z"
+    "submittedAt": "2026-11-01T12:01:24Z",
+    "objectiveProgress": null,
+    "setup": null
   },
   "lookup": {
     "result": {
@@ -184,7 +187,9 @@
       "destroyed": 4,
       "elapsedMs": 24000,
       "accuracy": 0.75,
-      "submittedAt": "2026-11-01T12:01:24Z"
+      "submittedAt": "2026-11-01T12:01:24Z",
+      "objectiveProgress": null,
+      "setup": null
     }
   },
   "list": {
@@ -207,7 +212,9 @@
         "destroyed": 4,
         "elapsedMs": 24000,
         "accuracy": 0.75,
-        "submittedAt": "2026-11-01T12:01:24Z"
+        "submittedAt": "2026-11-01T12:01:24Z",
+        "objectiveProgress": null,
+        "setup": null
       }
     ],
     "total": 1,
@@ -233,7 +240,9 @@
       "destroyed": 4,
       "elapsedMs": 24000,
       "accuracy": 0.75,
-      "submittedAt": "2026-11-01T12:01:24Z"
+      "submittedAt": "2026-11-01T12:01:24Z",
+      "objectiveProgress": null,
+      "setup": null
     }
   },
   "abandoned": {
@@ -304,7 +313,8 @@
       },
       "status": "abandoned",
       "startedAt": "2026-11-01T12:01:00Z",
-      "completedAt": "2026-11-01T12:01:10Z"
+      "completedAt": "2026-11-01T12:01:10Z",
+      "setup": null
     }
   }
 }

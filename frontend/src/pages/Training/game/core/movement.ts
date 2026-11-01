@@ -184,6 +184,7 @@ export function advanceCharacterMovement(
   obstacles: readonly Obstacle[],
   terrain: TerrainSurface,
   jumpMultiplier = 1,
+  arenaHalfSize = ARENA_HALF_SIZE,
 ): { position: GroundVector; jump: JumpState } {
   const dt = safeDelta(rawDt);
   if (!dt) return { position: { ...position }, jump: { ...jump } };
@@ -205,11 +206,11 @@ export function advanceCharacterMovement(
     const airborne = advanceJump(previous, stepDt, jumpPressed && step === 0, oldFloor, jumpMultiplier);
     const clearance = Math.max(previous.y, airborne.y);
     const walls = obstacles.filter(obstacle => obstacleTop(obstacle, terrain.sampleHeight) > clearance + 1e-6);
-    const candidate = moveWithCollisions(old, stepMove, walls);
+    const candidate = moveWithCollisions(old, stepMove, walls, arenaHalfSize);
     // A box can carry the feet over a steep piece of ground underneath it.
     const groundedOnTerrain = previous.grounded && Math.abs(previous.y - terrain.sampleHeight(old.x, old.z)) < 1e-5;
     const onTerrain = moveAcrossTerrain(old, candidate, clearance, groundedOnTerrain, terrain);
-    next = moveWithCollisions(old, { x: onTerrain.x - old.x, z: onTerrain.z - old.z }, walls);
+    next = moveWithCollisions(old, { x: onTerrain.x - old.x, z: onTerrain.z - old.z }, walls, arenaHalfSize);
     const floor = supportHeight(next, clearance, obstacles, terrain.sampleHeight);
     if (airborne.grounded) {
       // Leaving a platform starts gravity immediately; ordinary slopes still snap.
@@ -227,7 +228,7 @@ export function advanceCharacterMovement(
       // from ratcheting up the enclosing mountain wall, without an invisible ring.
       const horizontalLength = Math.hypot(normal.x, normal.z);
       const slide = (WALK_SPEED + 1.8) * stepDt / horizontalLength;
-      const slideCandidate = moveWithCollisions(next, { x: normal.x * slide, z: normal.z * slide }, walls);
+      const slideCandidate = moveWithCollisions(next, { x: normal.x * slide, z: normal.z * slide }, walls, arenaHalfSize);
       next = moveAcrossTerrain(next, slideCandidate, state.y, false, terrain);
       const slideFloor = supportHeight(next, state.y, obstacles, terrain.sampleHeight);
       state = { y: Math.min(state.y, slideFloor), verticalVelocity: 0, grounded: false };

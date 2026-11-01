@@ -1,0 +1,17 @@
+{
+  "id": "clear-drones",
+  "version": "clear-drones-v1",
+  "title": "花谷清场",
+  "description": "穿过庭院两侧入口，利用墙体与箱子逐一击毁四架巡逻无人机。",
+  "objective": {
+    "kind": "clear_drones"
+  },
+  "mapVersionId": "11111111-1111-4111-8111-111111111102",
+  "allowedTools": [
+    "none",
+    "curtain",
+    "decoy",
+    "pulse"
+  ],
+  "configVersion": "drone-hunt-v2"
+}

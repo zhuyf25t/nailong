@@ -4,7 +4,7 @@ import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import services.player.objects.PlayerId
 import services.system.objects.TimeCodecs.given
-import services.training.objects.{RunId, TerrainConfig, TrainingConfigId}
+import services.training.objects.{RunId, RunSetup, TerrainConfig, TrainingConfigId}
 import java.time.Instant
 
 final case class TrainingResult(
@@ -19,7 +19,9 @@ final case class TrainingResult(
   destroyed: Int,
   elapsedMs: Long,
   accuracy: Double,
-  submittedAt: Instant
+  submittedAt: Instant,
+  objectiveProgress: Option[ObjectiveProgress] = None,
+  setup: Option[RunSetup] = None
 )
 
 object TrainingResult:

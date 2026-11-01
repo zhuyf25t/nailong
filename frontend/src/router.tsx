@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Button } from './components/ui/Button';
 import { StatusPanel } from './components/ui/StatusPanel';
 import Home from './pages/Home';
@@ -8,6 +8,13 @@ import Result from './pages/Result';
 import Training from './pages/Training';
 import { useSession } from './system/session/SessionProvider';
 import type { GameSettings } from './system/settings/GameSettings';
+
+const Missions = lazy(() => import('./pages/Missions'));
+const Loadout = lazy(() => import('./pages/Loadout'));
+const Academy = lazy(() => import('./pages/Academy'));
+const Replay = lazy(() => import('./pages/Replay'));
+const Workshop = lazy(() => import('./pages/Workshop'));
+const MapEditor = lazy(() => import('./pages/MapEditor'));
 
 function AccountGate({ children, login }: { children: ReactNode; login: (path: string) => void }) {
   const session = useSession();
@@ -29,11 +36,17 @@ function TrainingRoute({ login, ...props }: { login: (path?: string) => void; se
   return practice || admitted || session.state.kind === 'signed-in' ? page : <AccountGate login={login}>{page}</AccountGate>;
 }
 export function AppRoutes({ enter, login, settings, suspended, openSettings }: { enter: (path: string) => void; login: (path?: string) => void; settings: GameSettings; suspended: boolean; openSettings: () => void }) {
-  return <Routes>
+  return <Suspense fallback={<StatusPanel title="正在翻开下一页…" busy />}><Routes>
     <Route path="/" element={<Home enter={enter} openSettings={openSettings} />} />
+    <Route path="/missions" element={<Missions />} />
+    <Route path="/missions/:missionId/loadout" element={<Loadout enter={enter} />} />
     <Route path="/training" element={<TrainingRoute login={login} settings={settings} suspended={suspended} openSettings={openSettings} />} />
     <Route path="/history" element={<AccountGate login={login}><History /></AccountGate>} />
     <Route path="/results/:runId" element={<AccountGate login={login}><Result /></AccountGate>} />
+    <Route path="/replays/:runId" element={<AccountGate login={login}><Replay /></AccountGate>} />
+    <Route path="/academy" element={<Academy settings={settings} suspended={suspended} openSettings={openSettings} />} />
+    <Route path="/workshop" element={<AccountGate login={login}><Workshop /></AccountGate>} />
+    <Route path="/workshop/maps/:mapId/edit" element={<AccountGate login={login}><MapEditor settings={settings} suspended={suspended} openSettings={openSettings} /></AccountGate>} />
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>;
+  </Routes></Suspense>;
 }

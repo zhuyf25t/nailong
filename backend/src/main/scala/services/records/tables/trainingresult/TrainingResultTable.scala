@@ -4,8 +4,8 @@ import cats.effect.IO
 import io.circe.parser.decode
 import io.circe.syntax.*
 import services.player.objects.PlayerId
-import services.records.objects.{ResultOutcome, TrainingResult}
-import services.training.objects.{RunId, TerrainConfig, TrainingConfigId}
+import services.records.objects.{ObjectiveProgress, ResultOutcome, TrainingResult}
+import services.training.objects.{RunId, RunSetup, TerrainConfig, TrainingConfigId}
 import java.sql.{Connection, ResultSet, Timestamp}
 import java.util.UUID
 import scala.util.Using
@@ -28,8 +28,8 @@ object TrainingResultTable:
     """
       |INSERT INTO training_results
       |  (run_id, player_id, config_id, config_version, terrain_json, outcome,
-      |   shots_fired, hits, destroyed, elapsed_ms, accuracy, submitted_at)
-      |VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
+      |   shots_fired, hits, destroyed, elapsed_ms, accuracy, submitted_at, objective_progress_json, setup_json)
+      |VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
       |RETURNING *
       |""".stripMargin
 
@@ -47,6 +47,8 @@ object TrainingResultTable:
       statement.setLong(10, result.elapsedMs)
       statement.setDouble(11, result.accuracy)
       statement.setTimestamp(12, Timestamp.from(result.submittedAt))
+      statement.setString(13, result.objectiveProgress.map(_.asJson.noSpaces).orNull)
+      statement.setString(14, result.setup.map(_.asJson.noSpaces).orNull)
       Using.resource(statement.executeQuery()) { rows =>
         if !rows.next() then throw new IllegalStateException("插入训练结果未返回记录")
         readRow(rows)
@@ -90,7 +92,7 @@ object TrainingResultTable:
     """
       |SELECT * FROM training_results
       |WHERE player_id = ? AND config_id = ? AND config_version = ?
-      |  AND terrain_json = ?::jsonb AND outcome = 'victory'
+      |  AND terrain_json = ?::jsonb AND outcome = 'victory' AND setup_json IS NULL
       |ORDER BY elapsed_ms ASC, accuracy DESC, submitted_at ASC, run_id ASC
       |LIMIT 1
       |""".stripMargin
@@ -134,5 +136,9 @@ object TrainingResultTable:
       destroyed = rows.getInt("destroyed"),
       elapsedMs = rows.getLong("elapsed_ms"),
       accuracy = rows.getDouble("accuracy"),
-      submittedAt = rows.getTimestamp("submitted_at").toInstant
+      submittedAt = rows.getTimestamp("submitted_at").toInstant,
+      objectiveProgress = Option(rows.getString("objective_progress_json")).map(text => decode[ObjectiveProgress](text).fold(
+        error => throw new IllegalStateException("数据库中的目标进度格式不正确", error), identity)),
+      setup = Option(rows.getString("setup_json")).map(text => decode[RunSetup](text).fold(
+        error => throw new IllegalStateException("数据库中的冻结任务格式不正确", error), identity))
     )

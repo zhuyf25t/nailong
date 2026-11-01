@@ -1,0 +1,176 @@
+{
+  "mode": "HTTP_FIXTURES",
+  "base": "http://127.0.0.1:8080",
+  "executedAt": "2026-11-01T12:47:27.731Z",
+  "exitCode": 2,
+  "actualGameplayVerified": false,
+  "stoppedOnFailure": false,
+  "outcomes": [
+    {
+      "name": "public health and configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "public missions and lookup",
+      "status": "PASS"
+    },
+    {
+      "name": "create fresh owner QA account",
+      "status": "PASS"
+    },
+    {
+      "name": "create fresh isolation QA account",
+      "status": "PASS"
+    },
+    {
+      "name": "private map endpoints require authentication",
+      "status": "PASS"
+    },
+    {
+      "name": "built-in template and empty personal maps",
+      "status": "PASS"
+    },
+    {
+      "name": "clone template into owned draft",
+      "status": "PASS"
+    },
+    {
+      "name": "private draft denied to other account",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid out-of-bounds world does not consume revision",
+      "status": "PASS"
+    },
+    {
+      "name": "freeze revision idempotently",
+      "status": "PASS"
+    },
+    {
+      "name": "private frozen version denied to other account",
+      "status": "PASS"
+    },
+    {
+      "name": "start and freeze selected world",
+      "status": "PASS"
+    },
+    {
+      "name": "same start selection returns same run",
+      "status": "PASS"
+    },
+    {
+      "name": "changed selection cannot reuse request ID",
+      "status": "PASS"
+    },
+    {
+      "name": "private map cannot be used to start another account run",
+      "status": "PASS"
+    },
+    {
+      "name": "private run denied to other account",
+      "status": "PASS"
+    },
+    {
+      "name": "revision conflict and new version preserve frozen run",
+      "status": "PASS"
+    },
+    {
+      "name": "legacy start and five-field clearing result",
+      "status": "PASS"
+    },
+    {
+      "name": "extraction requires activated beacon",
+      "status": "PASS"
+    },
+    {
+      "name": "defeat cannot declare extraction",
+      "status": "PASS"
+    },
+    {
+      "name": "extraction victory without kills is saved idempotently",
+      "status": "PASS"
+    },
+    {
+      "name": "private saved result denied to other account",
+      "status": "PASS"
+    },
+    {
+      "name": "legacy records honestly report missing recordings",
+      "status": "PASS"
+    },
+    {
+      "name": "recording endpoints require authentication and owner",
+      "status": "PASS"
+    },
+    {
+      "name": "events reject unordered timestamps and invented entity references",
+      "status": "PASS"
+    },
+    {
+      "name": "event summary saves, retries and returns exact semantic content",
+      "status": "PASS"
+    },
+    {
+      "name": "replay rejects bad hash and frames claiming future events",
+      "status": "PASS"
+    },
+    {
+      "name": "summary-first rejects contradictory replay without changing either record",
+      "status": "PASS"
+    },
+    {
+      "name": "replay above ordinary body budget saves original UTF8 bytes immutably",
+      "status": "PASS"
+    },
+    {
+      "name": "replay-first rejects contradictory summary and accepts matching later upload",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary API body limit remains bounded",
+      "status": "PASS"
+    },
+    {
+      "name": "faster extraction cannot replace legacy clearing best",
+      "status": "PASS"
+    },
+    {
+      "name": "new clear mission still requires all drones",
+      "status": "PASS"
+    },
+    {
+      "name": "other account history remains empty",
+      "status": "PASS"
+    },
+    {
+      "name": "browser",
+      "status": "PENDING",
+      "detail": "PENDING: real gameplay, visual occlusion, readonly playback and mobile controls"
+    }
+  ],
+  "created": {
+    "players": [
+      "76911f93-0dc8-45e1-bd55-162931702861",
+      "ece53782-2090-4281-a9e4-cda054b3a842"
+    ],
+    "maps": [
+      "292b5a54-be3f-4805-a29d-b1f97fbd5709"
+    ],
+    "versions": [
+      "c466df47-bccb-4e07-9019-94816c36fdf8",
+      "bdf8133a-0a4b-43da-a11f-51b8ba230499"
+    ],
+    "runs": [
+      "2c833f7a-8a52-4781-b7a4-49e810ae90aa",
+      "fc630dff-747e-4024-ba49-f85b6791a904",
+      "6255f38e-232b-478f-be1c-4af010a9eeb1",
+      "35b8bd47-eac9-48c0-b582-af0115b2b6c5"
+    ]
+  },
+  "notes": [
+    "Only new QA-owned data was written; no data was deleted.",
+    "Checks after the first failure are not attempted, not counted as passed.",
+    "Event/replay payloads are explicitly synthetic protocol fixtures, not a recorded game.",
+    "Real browser gameplay, interrupted upload recovery and boundary budgets still require separate verification."
+  ]
+}

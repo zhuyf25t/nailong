@@ -18,8 +18,8 @@ export function ResultSummary({ submission, totalDrones, showHeading = true }: R
           {victory ? <Trophy size={26} aria-hidden="true" /> : <Flag size={26} aria-hidden="true" />}
         </span>
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-ink">{victory ? '花谷安全啦！' : '被无人机追上了'}</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">{victory ? '全部无人机已经清除，记下这一刻。' : '避开红色扫描，利用箱子和山坡拉开距离。'}</p>
+          <h2 className="text-2xl font-bold tracking-tight text-ink">{victory ? submission.objectiveProgress?.extracted ? '信标亮起，平安归来！' : '花谷安全啦！' : '被无人机追上了'}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">{victory ? submission.objectiveProgress?.extracted ? '启动信标并抵达撤离点，这次行动的目标完成。' : '全部无人机已经清除，记下这一刻。' : '回看真实过程，观察下一次可以改变的路线与时机。'}</p>
         </div>
       </div>}
       <dl className="grid grid-cols-2 gap-4 border-y border-line py-5">
@@ -32,6 +32,7 @@ export function ResultSummary({ submission, totalDrones, showHeading = true }: R
           <dd className="mt-2 text-2xl font-bold tabular-nums text-ink">{formatElapsed(submission.elapsedMs)}</dd>
         </div>
       </dl>
+      {submission.objectiveProgress && <p className="rounded-xl bg-primary/5 p-3 text-sm text-primary">信标：{submission.objectiveProgress.beaconActivated ? '已启动' : '尚未启动'} · 撤离：{submission.objectiveProgress.extracted ? '已完成' : '尚未完成'}</p>}
       <dl className="grid grid-cols-3 gap-2 text-center">
         <div><dt className="text-sm text-muted">命中</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-ink">{submission.hits}</dd></div>
         <div><dt className="text-sm text-muted">发射</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-ink">{submission.shotsFired}</dd></div>

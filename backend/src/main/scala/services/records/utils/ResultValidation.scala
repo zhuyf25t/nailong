@@ -4,13 +4,14 @@ import cats.effect.IO
 import services.records.objects.{ResultOutcome, ResultSubmission, TrainingResult}
 import services.system.objects.HttpError
 import services.training.objects.{TerrainConfig, TrainingRun}
+import services.worlds.objects.MissionObjective
 
 object ResultValidation:
   private[records] def validateSubmission(run: TrainingRun, submission: ResultSubmission): IO[Unit] = IO {
     val shots = submission.shotsFired.toLong
     val hits = submission.hits.toLong
     val destroyed = submission.destroyed.toLong
-    val count = run.config.drones.spawns.length.toLong
+    val count = run.setup.fold(run.config.drones.spawns.length)(_.world.drones.length).toLong
     val hp = run.config.drones.maxHp.toLong
     if shots < 0 || shots > 1000000 || hits < 0 || destroyed < 0 then
       throw HttpError.validation("发射、命中与击毁数量必须为非负整数，发射数量不能超过一百万")
@@ -22,12 +23,24 @@ object ResultValidation:
     val maximumHits = minimumHits + (count - destroyed) * (hp - 1)
     if hits < minimumHits || hits > maximumHits then
       throw HttpError.validation("命中数与无人机血量、击毁数量不一致")
-    submission.outcome match
-      case ResultOutcome.Victory if destroyed != count || hits != count * hp =>
-        throw HttpError.validation("胜利必须击毁本局所有无人机")
-      case ResultOutcome.Defeat if destroyed == count =>
-        throw HttpError.validation("无人机已全部击毁，不能记录为失败")
-      case _ => ()
+    run.setup.map(_.mission.objective).getOrElse(MissionObjective.ClearDrones) match
+      case MissionObjective.ClearDrones =>
+        submission.outcome match
+          case ResultOutcome.Victory if destroyed != count || hits != count * hp =>
+            throw HttpError.validation("胜利必须击毁本局所有无人机")
+          case ResultOutcome.Defeat if destroyed == count =>
+            throw HttpError.validation("无人机已全部击毁，不能记录为失败")
+          case _ => ()
+        if submission.objectiveProgress.exists(p => p.beaconActivated || p.extracted) then
+          throw HttpError.validation("清场任务不能声明撤离目标进度")
+      case MissionObjective.ActivateExtract(_, _) =>
+        val progress = submission.objectiveProgress.getOrElse(throw HttpError.validation("撤离任务必须提供目标进度"))
+        if progress.extracted && !progress.beaconActivated then
+          throw HttpError.validation("激活信标后才能撤离")
+        if submission.outcome == ResultOutcome.Victory && (!progress.beaconActivated || !progress.extracted) then
+          throw HttpError.validation("撤离胜利必须激活信标并完成撤离")
+        if submission.outcome == ResultOutcome.Defeat && progress.extracted then
+          throw HttpError.validation("已成功撤离不能记录为失败")
     // The first shot is immediate; allow one further interval at the timing boundary.
     val minimumElapsed = math.max(0L, shots - 2L) * run.config.weapon.fireIntervalMs.toLong
     if submission.elapsedMs < minimumElapsed then
@@ -39,7 +52,8 @@ object ResultValidation:
       result.shotsFired == submission.shotsFired &&
       result.hits == submission.hits &&
       result.destroyed == submission.destroyed &&
-      result.elapsedMs == submission.elapsedMs
+      result.elapsedMs == submission.elapsedMs &&
+      result.objectiveProgress == submission.objectiveProgress
 
   private[records] def validatePagination(offset: Int, limit: Int): IO[Unit] = IO {
     if offset < 0 || offset > 10000 || limit < 1 || limit > 50 then

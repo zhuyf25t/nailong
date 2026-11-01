@@ -48,7 +48,9 @@ final case class SaveTrainingResultAPIMessage(
               destroyed = submission.destroyed,
               elapsedMs = submission.elapsedMs,
               accuracy = if submission.shotsFired == 0 then 0.0 else submission.hits.toDouble / submission.shotsFired,
-              submittedAt = now
+              submittedAt = now,
+              objectiveProgress = submission.objectiveProgress,
+              setup = run.setup
             ))
             _ <- TrainingRunTable.markCompleted(connection, playerId, runId, now)
           yield saved

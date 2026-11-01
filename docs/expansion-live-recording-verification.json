@@ -1,0 +1,441 @@
+{
+  "checkedAt": "2026-11-01T12:59:50.597Z",
+  "source": "Read-only API check of parent-observed IAB production gameplay; this agent did not drive the game",
+  "runId": "4ca3363a-eee8-4a29-b7d6-f2126da9e257",
+  "playerId": "1899db87-67c5-4571-88bf-4eb5c139112f",
+  "status": "PASS",
+  "writeScope": "Only temporary login session creation and logout; no game record writes",
+  "result": {
+    "runId": "4ca3363a-eee8-4a29-b7d6-f2126da9e257",
+    "playerId": "1899db87-67c5-4571-88bf-4eb5c139112f",
+    "configId": "c8137000-0000-4000-8000-000000000001",
+    "configVersion": "drone-hunt-v2",
+    "terrain": {
+      "hillHeight": 0.6,
+      "hillWidth": 5.4,
+      "hillX": 6,
+      "hillZ": -4,
+      "ripple": 0.12
+    },
+    "outcome": "defeat",
+    "shotsFired": 0,
+    "hits": 0,
+    "destroyed": 0,
+    "elapsedMs": 14917,
+    "accuracy": 0,
+    "submittedAt": "2026-11-01T12:58:41.758327Z",
+    "objectiveProgress": {
+      "beaconActivated": false,
+      "extracted": false
+    },
+    "setup": {
+      "mission": {
+        "id": "forest-beacon",
+        "version": "forest-beacon-v1",
+        "title": "点亮信标",
+        "description": "绕过庭院巡逻，在后庭点亮信标，再经中央捷径返回营地撤离。无需击毁全部无人机。",
+        "objective": {
+          "kind": "activate_extract",
+          "beaconId": "beacon-main",
+          "extractionId": "extraction-camp"
+        },
+        "mapVersionId": "11111111-1111-4111-8111-111111111101",
+        "allowedTools": [
+          "none",
+          "curtain",
+          "decoy",
+          "pulse"
+        ],
+        "configVersion": "drone-hunt-v2"
+      },
+      "world": {
+        "schemaVersion": 1,
+        "title": "花谷旧庭院",
+        "terrain": {
+          "hillHeight": 0.6,
+          "hillWidth": 5.4,
+          "hillX": 6,
+          "hillZ": -4,
+          "ripple": 0.12
+        },
+        "bounds": {
+          "halfSize": 24
+        },
+        "spawn": {
+          "x": 0,
+          "z": 16,
+          "yaw": 3.141592653589793
+        },
+        "objects": [
+          {
+            "id": "outer-west",
+            "kind": "wall",
+            "x": -18.5,
+            "z": 3,
+            "width": 11,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "entry-west",
+            "kind": "wall",
+            "x": -5.25,
+            "z": 3,
+            "width": 7.5,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "shortcut-gate",
+            "kind": "gate",
+            "x": 0,
+            "z": 3,
+            "width": 3,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "entry-east",
+            "kind": "wall",
+            "x": 5.25,
+            "z": 3,
+            "width": 7.5,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "outer-east",
+            "kind": "wall",
+            "x": 18.5,
+            "z": 3,
+            "width": 11,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "rear-west",
+            "kind": "wall",
+            "x": -17,
+            "z": -10,
+            "width": 14,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "rear-center",
+            "kind": "wall",
+            "x": 0,
+            "z": -10,
+            "width": 12,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "rear-east",
+            "kind": "wall",
+            "x": 17,
+            "z": -10,
+            "width": 14,
+            "depth": 1,
+            "height": 3.6
+          },
+          {
+            "id": "west-cover",
+            "kind": "crate",
+            "x": -9,
+            "z": -3,
+            "width": 2.4,
+            "depth": 2.4,
+            "height": 2.6
+          },
+          {
+            "id": "east-cover",
+            "kind": "crate",
+            "x": 9,
+            "z": -3,
+            "width": 2.4,
+            "depth": 2.4,
+            "height": 2.6
+          },
+          {
+            "id": "rear-cover-west",
+            "kind": "crate",
+            "x": -3,
+            "z": -15,
+            "width": 2,
+            "depth": 2,
+            "height": 2.4
+          },
+          {
+            "id": "rear-cover-east",
+            "kind": "crate",
+            "x": 3,
+            "z": -15,
+            "width": 2,
+            "depth": 2,
+            "height": 2.4
+          },
+          {
+            "id": "camp-crate",
+            "kind": "crate",
+            "x": -5,
+            "z": 11,
+            "width": 2.2,
+            "depth": 2.2,
+            "height": 1.8
+          },
+          {
+            "id": "camp-barrel",
+            "kind": "barrel",
+            "x": 5,
+            "z": 10,
+            "width": 1.3,
+            "depth": 1.3,
+            "height": 1.7
+          }
+        ],
+        "drones": [
+          {
+            "id": "drone-west",
+            "x": -5,
+            "z": -3,
+            "yaw": 1.5707963267948966,
+            "patrol": [
+              {
+                "x": -5,
+                "z": -3
+              },
+              {
+                "x": -5,
+                "z": -7
+              },
+              {
+                "x": -2,
+                "z": -7
+              },
+              {
+                "x": -2,
+                "z": -3
+              }
+            ]
+          },
+          {
+            "id": "drone-east",
+            "x": 5,
+            "z": -5,
+            "yaw": -1.5707963267948966,
+            "patrol": [
+              {
+                "x": 5,
+                "z": -5
+              },
+              {
+                "x": 2,
+                "z": -5
+              },
+              {
+                "x": 2,
+                "z": -1
+              },
+              {
+                "x": 5,
+                "z": -1
+              }
+            ]
+          },
+          {
+            "id": "drone-rear-west",
+            "x": -8,
+            "z": -17,
+            "yaw": 0,
+            "patrol": [
+              {
+                "x": -8,
+                "z": -17
+              },
+              {
+                "x": -8,
+                "z": -20
+              },
+              {
+                "x": -5,
+                "z": -20
+              },
+              {
+                "x": -5,
+                "z": -17
+              }
+            ]
+          },
+          {
+            "id": "drone-rear-east",
+            "x": 8,
+            "z": -17,
+            "yaw": 3.141592653589793,
+            "patrol": [
+              {
+                "x": 8,
+                "z": -17
+              },
+              {
+                "x": 5,
+                "z": -17
+              },
+              {
+                "x": 5,
+                "z": -20
+              },
+              {
+                "x": 8,
+                "z": -20
+              }
+            ]
+          }
+        ],
+        "beacon": {
+          "id": "beacon-main",
+          "x": 0,
+          "z": -19,
+          "radius": 1.8
+        },
+        "extraction": {
+          "id": "extraction-camp",
+          "x": 0,
+          "z": 17,
+          "radius": 2
+        }
+      },
+      "mapVersionId": "11111111-1111-4111-8111-111111111101",
+      "loadout": {
+        "tool": "curtain"
+      },
+      "seed": 2032524045,
+      "assetVersion": "garden-v1"
+    }
+  },
+  "frozenSetup": {
+    "missionId": "forest-beacon",
+    "mapVersionId": "11111111-1111-4111-8111-111111111101",
+    "tool": "curtain",
+    "seed": 2032524045
+  },
+  "events": {
+    "status": "available",
+    "formatVersion": 1,
+    "count": 4,
+    "truncated": false,
+    "kindCounts": {
+      "tool": 1,
+      "drone-state": 1,
+      "contact": 1,
+      "round-end": 1
+    },
+    "keyEvents": [
+      {
+        "seq": 0,
+        "tMs": 10450,
+        "kind": "tool",
+        "actorId": "player",
+        "targetId": "tool-1",
+        "position": {
+          "x": -10.732599324414345,
+          "y": 0.10759268981024722,
+          "z": -4.229742185832383
+        },
+        "value": 3,
+        "detail": "curtain"
+      },
+      {
+        "seq": 2,
+        "tMs": 14917,
+        "kind": "contact",
+        "actorId": "drone-west",
+        "targetId": "player",
+        "position": {
+          "x": -8.1558436632652,
+          "y": 1.3926682894674312,
+          "z": -14.237275765999142
+        },
+        "value": null,
+        "detail": null
+      },
+      {
+        "seq": 3,
+        "tMs": 14917,
+        "kind": "round-end",
+        "actorId": "player",
+        "targetId": null,
+        "position": {
+          "x": -8.257529869035903,
+          "y": 0.6680983685903514,
+          "z": -15.577181120751714
+        },
+        "value": null,
+        "detail": "defeat"
+      }
+    ]
+  },
+  "replay": {
+    "status": "available",
+    "hashVerified": true,
+    "matchesFrozenWorldAndConfig": true,
+    "commonEventsMatchSummary": true,
+    "rawUtf8Bytes": 247335,
+    "frameCount": 190,
+    "coverage": {
+      "kind": "complete",
+      "reason": null,
+      "fromMs": 0,
+      "toMs": 16117,
+      "runDurationMs": 16117,
+      "resultAtMs": 14917
+    },
+    "sampleHz": 10,
+    "initialPlayer": {
+      "position": {
+        "x": 0,
+        "y": 0.21556852757930756,
+        "z": 16
+      },
+      "yaw": 3.141592653589793,
+      "animation": "idle",
+      "animationTime": 0,
+      "aimWeight": 0,
+      "alive": true
+    },
+    "finalPlayer": {
+      "position": {
+        "x": -8.257529869035903,
+        "y": 0.6680983685903514,
+        "z": -15.577181120751714
+      },
+      "yaw": 3.1415926536686674,
+      "animation": "walk",
+      "animationTime": 16.067000000000146,
+      "aimWeight": 0.8,
+      "alive": false
+    },
+    "recordedPathLengthXZ": 44.339,
+    "framesWithActiveTools": 51,
+    "finalWorld": {
+      "openGateIds": [],
+      "beaconActivated": false,
+      "extracted": false
+    }
+  },
+  "notVerifiedHere": [
+    "Replay visual fidelity while playing and seeking",
+    "Victory or stealth extraction",
+    "Offline upload recovery",
+    "Physical phone performance"
+  ],
+  "afterPlaybackHistory": {
+    "checkedAt": "2026-11-01T13:01:58.786Z",
+    "total": 1,
+    "runIds": [
+      "4ca3363a-eee8-4a29-b7d6-f2126da9e257"
+    ],
+    "originalResultUnchanged": true,
+    "interpretation": "No additional saved result rows observed; this does not prove there were no idempotent save requests"
+  }
+}

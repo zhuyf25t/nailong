@@ -8,7 +8,8 @@ final case class ResultSubmission(
   shotsFired: Int,
   hits: Int,
   destroyed: Int,
-  elapsedMs: Long
+  elapsedMs: Long,
+  objectiveProgress: Option[ObjectiveProgress] = None
 )
 
 object ResultSubmission:

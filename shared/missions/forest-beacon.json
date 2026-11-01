@@ -1,0 +1,19 @@
+{
+  "id": "forest-beacon",
+  "version": "forest-beacon-v1",
+  "title": "点亮信标",
+  "description": "绕过庭院巡逻，在后庭点亮信标，再经中央捷径返回营地撤离。无需击毁全部无人机。",
+  "objective": {
+    "kind": "activate_extract",
+    "beaconId": "beacon-main",
+    "extractionId": "extraction-camp"
+  },
+  "mapVersionId": "11111111-1111-4111-8111-111111111101",
+  "allowedTools": [
+    "none",
+    "curtain",
+    "decoy",
+    "pulse"
+  ],
+  "configVersion": "drone-hunt-v2"
+}

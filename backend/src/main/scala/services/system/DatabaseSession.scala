@@ -28,6 +28,8 @@ object DatabaseSession:
       pool.setPassword(config.password)
       pool.setMaximumPoolSize(config.maxPoolSize)
       pool.setConnectionTimeout(10000L)
+      // A waiter must see the preceding upload's committed row after acquiring the run lock.
+      pool.setTransactionIsolation("TRANSACTION_READ_COMMITTED")
       pool.setPoolName("nailong-postgres")
       new HikariDataSource(pool)
     })(pool => IO.blocking(pool.close())).map(new DatabaseSession(_))

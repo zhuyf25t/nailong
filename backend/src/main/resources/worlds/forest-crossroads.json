@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "title": "林间交叉口",
+  "terrain": {
+    "hillHeight": 1.15,
+    "hillWidth": 5.4,
+    "hillX": -5,
+    "hillZ": -5,
+    "ripple": 0.18
+  },
+  "bounds": {
+    "halfSize": 24
+  },
+  "spawn": {
+    "x": 0,
+    "z": 16,
+    "yaw": 3.141592653589793
+  },
+  "objects": [
+    {
+      "id": "outer-west",
+      "kind": "wall",
+      "x": -18.5,
+      "z": 3,
+      "width": 11,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "entry-west",
+      "kind": "wall",
+      "x": -5.25,
+      "z": 3,
+      "width": 7.5,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "shortcut-gate",
+      "kind": "gate",
+      "x": 0,
+      "z": 3,
+      "width": 3,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "entry-east",
+      "kind": "wall",
+      "x": 5.25,
+      "z": 3,
+      "width": 7.5,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "outer-east",
+      "kind": "wall",
+      "x": 18.5,
+      "z": 3,
+      "width": 11,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "rear-west",
+      "kind": "wall",
+      "x": -17,
+      "z": -10,
+      "width": 14,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "rear-center",
+      "kind": "wall",
+      "x": 0,
+      "z": -10,
+      "width": 12,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "rear-east",
+      "kind": "wall",
+      "x": 17,
+      "z": -10,
+      "width": 14,
+      "depth": 1,
+      "height": 3.6
+    },
+    {
+      "id": "courtyard-divider",
+      "kind": "wall",
+      "x": 0,
+      "z": -3,
+      "width": 1,
+      "depth": 6,
+      "height": 3.2
+    },
+    {
+      "id": "west-cover",
+      "kind": "crate",
+      "x": -9,
+      "z": -4,
+      "width": 2.4,
+      "depth": 2.4,
+      "height": 2.6
+    },
+    {
+      "id": "east-cover",
+      "kind": "crate",
+      "x": 9,
+      "z": -4,
+      "width": 2.4,
+      "depth": 2.4,
+      "height": 2.6
+    },
+    {
+      "id": "rear-cover-west",
+      "kind": "crate",
+      "x": -3,
+      "z": -15,
+      "width": 2,
+      "depth": 2,
+      "height": 2.4
+    },
+    {
+      "id": "rear-cover-east",
+      "kind": "crate",
+      "x": 3,
+      "z": -15,
+      "width": 2,
+      "depth": 2,
+      "height": 2.4
+    },
+    {
+      "id": "camp-crate",
+      "kind": "crate",
+      "x": -6,
+      "z": 12,
+      "width": 2.2,
+      "depth": 2.2,
+      "height": 1.8
+    },
+    {
+      "id": "camp-barrel",
+      "kind": "barrel",
+      "x": 6,
+      "z": 12,
+      "width": 1.3,
+      "depth": 1.3,
+      "height": 1.7
+    }
+  ],
+  "drones": [
+    {
+      "id": "drone-west",
+      "x": -5,
+      "z": -3,
+      "yaw": 1.5707963267948966,
+      "patrol": [
+        {
+          "x": -5,
+          "z": -3
+        },
+        {
+          "x": -5,
+          "z": -7
+        },
+        {
+          "x": -2,
+          "z": -7
+        },
+        {
+          "x": -2,
+          "z": -3
+        }
+      ]
+    },
+    {
+      "id": "drone-east",
+      "x": 5,
+      "z": -5,
+      "yaw": -1.5707963267948966,
+      "patrol": [
+        {
+          "x": 5,
+          "z": -5
+        },
+        {
+          "x": 2,
+          "z": -5
+        },
+        {
+          "x": 2,
+          "z": -1
+        },
+        {
+          "x": 5,
+          "z": -1
+        }
+      ]
+    },
+    {
+      "id": "drone-rear-west",
+      "x": -8,
+      "z": -17,
+      "yaw": 0,
+      "patrol": [
+        {
+          "x": -8,
+          "z": -17
+        },
+        {
+          "x": -8,
+          "z": -20
+        },
+        {
+          "x": -5,
+          "z": -20
+        },
+        {
+          "x": -5,
+          "z": -17
+        }
+      ]
+    },
+    {
+      "id": "drone-rear-east",
+      "x": 8,
+      "z": -17,
+      "yaw": 3.141592653589793,
+      "patrol": [
+        {
+          "x": 8,
+          "z": -17
+        },
+        {
+          "x": 5,
+          "z": -17
+        },
+        {
+          "x": 5,
+          "z": -20
+        },
+        {
+          "x": 8,
+          "z": -20
+        }
+      ]
+    }
+  ],
+  "beacon": {
+    "id": "beacon-main",
+    "x": 0,
+    "z": -19,
+    "radius": 1.8
+  },
+  "extraction": {
+    "id": "extraction-camp",
+    "x": 0,
+    "z": 17,
+    "radius": 2
+  }
+}

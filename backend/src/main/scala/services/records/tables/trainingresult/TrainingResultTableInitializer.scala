@@ -22,6 +22,8 @@ object TrainingResultTableInitializer:
       |  submitted_at TIMESTAMPTZ NOT NULL,
       |  FOREIGN KEY (config_id, config_version) REFERENCES training_configs(id, version)
       |);
+      |ALTER TABLE training_results ADD COLUMN IF NOT EXISTS objective_progress_json JSONB;
+      |ALTER TABLE training_results ADD COLUMN IF NOT EXISTS setup_json JSONB;
       |CREATE INDEX IF NOT EXISTS training_results_history_idx
       |  ON training_results (player_id, submitted_at DESC, run_id ASC);
       |CREATE INDEX IF NOT EXISTS training_results_best_idx

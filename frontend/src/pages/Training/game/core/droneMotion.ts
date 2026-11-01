@@ -20,12 +20,16 @@ export interface DroneMotion {
   readonly phase: number;
   readonly avoidDirection: -1 | 1;
   readonly rules: DroneRules;
+  readonly patrol: readonly GroundVector[];
+  readonly halfSize: number;
   waypoint: number;
   stuckTime: number;
 }
 
-export function createDroneMotion(position: GroundVector, id: number, rules: DroneRules = DEFAULT_DRONE_RULES): DroneMotion {
-  return { spawn: { x: position.x, z: position.z }, rules, phase: id * 1.73, avoidDirection: id % 2 ? -1 : 1, waypoint: 0, stuckTime: 0 };
+export function createDroneMotion(position: GroundVector, id: number, rules: DroneRules = DEFAULT_DRONE_RULES,
+  options: { patrol?: readonly GroundVector[]; halfSize?: number } = {}): DroneMotion {
+  return { spawn: { x: position.x, z: position.z }, rules, phase: id * 1.73, avoidDirection: id % 2 ? -1 : 1,
+    patrol: options.patrol?.map(point => ({ ...point })) ?? [], halfSize: options.halfSize ?? 38, waypoint: 0, stuckTime: 0 };
 }
 
 export function resetDroneMotion(motion: DroneMotion) { motion.waypoint = 0; motion.stuckTime = 0; }
@@ -45,7 +49,7 @@ function flightHeight(y: number, floor: number, chasing: boolean, dt: number) {
 /** Swept circle movement uses the same boxes as the player. Drones hover over
  * gentle ground but cannot fly through crates or climb the enclosing cliffs. */
 export function advanceDroneMotion(
-  motion: DroneMotion, position: DronePoint, brain: Pick<DroneBrain, 'state' | 'lastSeen'>,
+  motion: DroneMotion, position: DronePoint, brain: Pick<DroneBrain, 'state' | 'lastSeen'> & Partial<Pick<DroneBrain, 'investigate'>>,
   dt: number, obstacles: readonly Obstacle[], sampleHeight: (x: number, z: number) => number,
 ): DronePoint {
   if (!Number.isFinite(dt) || dt <= 0 || brain.state === 'destroyed') return { ...position };
@@ -54,12 +58,12 @@ export function advanceDroneMotion(
   const step = Math.min(dt, .25) / stepCount;
   for (let i = 0; i < stepCount; i++) {
     const previousY = result.y;
-    if (brain.state === 'alert') {
+    if (brain.state === 'alert' && !brain.investigate) {
       result.y = flightHeight(result.y, sampleHeight(result.x, result.z), false, step);
       continue;
     }
     const angle = motion.phase + motion.waypoint * Math.PI * 2 / WAYPOINTS;
-    const destination = brain.state === 'locked' ? brain.lastSeen : {
+    const destination = brain.state === 'locked' ? brain.lastSeen : brain.investigate ?? motion.patrol[motion.waypoint] ?? {
       x: motion.spawn.x + Math.sin(angle) * motion.rules.patrolRadius,
       z: motion.spawn.z + Math.cos(angle) * motion.rules.patrolRadius,
     };
@@ -67,8 +71,8 @@ export function advanceDroneMotion(
     const dx = destination.x - result.x, dz = destination.z - result.z;
     const distance = Math.hypot(dx, dz);
     if (distance < .15) {
-      if (brain.state === 'scanning') motion.waypoint = (motion.waypoint + 1) % WAYPOINTS;
-      else { result.y = flightHeight(result.y, sampleHeight(result.x, result.z), true, step); continue; }
+      if (brain.state === 'scanning' && !brain.investigate) motion.waypoint = (motion.waypoint + 1) % (motion.patrol.length || WAYPOINTS);
+      else { result.y = flightHeight(result.y, sampleHeight(result.x, result.z), brain.state === 'locked', step); continue; }
       continue;
     }
     const speed = brain.state === 'locked' ? motion.rules.chaseSpeed : motion.rules.patrolSpeed;
@@ -78,7 +82,7 @@ export function advanceDroneMotion(
     for (const turn of steerAngles) {
       const x = (dx * Math.cos(turn) - dz * Math.sin(turn)) / distance * travel;
       const z = (dx * Math.sin(turn) + dz * Math.cos(turn)) / distance * travel;
-      const candidate = moveWithCollisions(result, { x, z }, obstacles, 38, motion.rules.contactRadius);
+      const candidate = moveWithCollisions(result, { x, z }, obstacles, motion.halfSize, motion.rules.contactRadius);
       const overlapsBox = obstacles.some(box => {
         const bx = Math.max(0, Math.abs(candidate.x - box.x) - box.halfX);
         const bz = Math.max(0, Math.abs(candidate.z - box.z) - box.halfZ);
@@ -100,12 +104,32 @@ export function advanceDroneMotion(
     }
     const progress = Math.hypot(best.x - result.x, best.z - result.z);
     motion.stuckTime = progress < travel * .2 ? motion.stuckTime + step : 0;
-    if (motion.stuckTime > .5 && brain.state === 'scanning') {
-      motion.waypoint = (motion.waypoint + 1) % WAYPOINTS;
+    if (motion.stuckTime > .5 && brain.state === 'scanning' && !brain.investigate) {
+      motion.waypoint = (motion.waypoint + 1) % (motion.patrol.length || WAYPOINTS);
       motion.stuckTime = 0;
     }
     result = best;
     result.y = flightHeight(previousY, sampleHeight(result.x, result.z), brain.state === 'locked', step);
+  }
+  return result;
+}
+
+/** A pulse displacement sweeps the same footprint as ordinary flight. Splitting
+ * the impulse also prevents jumping across a steep terrain edge in one step. */
+export function pushDroneAway(position: DronePoint, source: DronePoint, distance: number,
+  obstacles: readonly Obstacle[], sampleHeight: (x: number, z: number) => number,
+  radius = DRONE_RADIUS, halfSize = 38): DronePoint {
+  if (!Number.isFinite(distance) || distance <= 0) return { ...position };
+  let result = { ...position };
+  const length = Math.hypot(position.x - source.x, position.z - source.z);
+  const direction = length > 1e-8 ? { x: (position.x - source.x) / length, z: (position.z - source.z) / length } : { x: 0, z: 1 };
+  const steps = Math.ceil(distance / .08);
+  for (let i = 0; i < steps; i++) {
+    const candidate = moveWithCollisions(result, { x: direction.x * distance / steps, z: direction.z * distance / steps }, obstacles, halfSize, radius);
+    const floor = sampleHeight(candidate.x, candidate.z), oldFloor = sampleHeight(result.x, result.z);
+    const moved = Math.hypot(candidate.x - result.x, candidate.z - result.z);
+    if (!Number.isFinite(floor) || floor - oldFloor > moved * 1.05 + 1e-5) break;
+    result = { ...candidate, y: Math.max(floor + DRONE_GROUNDED_HEIGHT, result.y + floor - oldFloor) };
   }
   return result;
 }

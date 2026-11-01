@@ -16,7 +16,8 @@ final case class TrainingRun(
   terrain: TerrainConfig,
   status: TrainingRunStatus,
   startedAt: Instant,
-  completedAt: Option[Instant]
+  completedAt: Option[Instant],
+  setup: Option[RunSetup] = None
 )
 
 object TrainingRun:

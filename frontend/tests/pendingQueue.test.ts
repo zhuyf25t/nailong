@@ -43,6 +43,32 @@ function saved(item: PendingResultItem = input) {
   });
 }
 
+test('objective progress survives reload, freezes nested state and participates in conflict checks', async () => {
+  const storage = new MemoryStorage();
+  const queue = new PendingResultQueue(storage, async (item) => saved(item));
+  const progress = { beaconActivated: true, extracted: true };
+  const item = queue.enqueue({ ...input, submission: { ...submission, objectiveProgress: progress } });
+  progress.extracted = false;
+  assert.deepEqual(item.submission.objectiveProgress, { beaconActivated: true, extracted: true });
+  assert.equal(Object.isFrozen(item.submission.objectiveProgress), true);
+  assert.throws(() => queue.enqueue({ ...input, submission: { ...submission, objectiveProgress: progress } }), /不同/);
+  assert.throws(() => queue.enqueue(input), /不同/);
+  const restored = new PendingResultQueue(storage, async (pending) => saved(pending));
+  assert.deepEqual(restored.itemsFor(owner)[0].submission.objectiveProgress, { beaconActivated: true, extracted: true });
+  assert.equal((await restored.retry(restored.itemsFor(owner)[0], { playerId: owner, token })).status, 'saved');
+  assert.equal(restored.itemsFor(owner).length, 0);
+});
+
+test('legacy absent progress and nullable response progress are equivalent, but falsified progress cannot acknowledge a save', async () => {
+  const queue = new PendingResultQueue(new MemoryStorage(), async (item) => ({ ...saved(item), objectiveProgress: null }));
+  const item = queue.enqueue(input);
+  assert.equal((await queue.retry(item, { playerId: owner, token })).status, 'saved');
+  const otherQueue = new PendingResultQueue(new MemoryStorage(), async (pending) => ({ ...saved(pending), objectiveProgress: { beaconActivated: false, extracted: false } }));
+  const extended = otherQueue.enqueue({ ...input, submission: { ...submission, objectiveProgress: { beaconActivated: true, extracted: true } } });
+  assert.equal((await otherQueue.retry(extended, { playerId: owner, token })).status, 'failed');
+  assert.equal(otherQueue.itemsFor(owner).length, 1);
+});
+
 test('enqueue freezes a copy and conflicting same-run submission cannot overwrite it', () => {
   const storage = new MemoryStorage();
   const queue = new PendingResultQueue(storage, async (item) => saved(item));

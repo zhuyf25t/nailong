@@ -11,7 +11,8 @@ import services.system.objects.HttpError
 final case class RegisteredAPIMessage(
   apiName: String,
   requiresUserToken: Boolean,
-  planJson: (Json, Connection) => IO[Json]
+  planJson: (Json, Connection) => IO[Json],
+  maxRequestBytes: Int = 16384
 )
 
 object RegisteredAPIMessage:

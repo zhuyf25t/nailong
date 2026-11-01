@@ -21,6 +21,8 @@ interface ControllerOptions {
   obstacles: Obstacle[];
   /** Limit keyboard input to this mounted game, including events inside a ShadowRoot. */
   inputScope?: HTMLElement | ShadowRoot;
+  spawn?: { x: number; z: number; yaw: number };
+  halfSize?: number;
   terrain?: {
     sampleHeight(x: number, z: number): number;
     normalAt(x: number, z: number): THREE.Vector3;
@@ -43,7 +45,7 @@ const INITIAL_PITCH = 0.16;
 const MIN_PITCH = 0.08;
 const MAX_PITCH = 0.95;
 
-export function createController({ canvas, camera, character, obstacles, terrain, inputScope }: ControllerOptions) {
+export function createController({ canvas, camera, character, obstacles, terrain, inputScope, spawn = { x: 0, z: 4, yaw: Math.PI }, halfSize }: ControllerOptions) {
   const keys = new Set<string>();
   const followTarget = new THREE.Vector3();
   let velocity: GroundVector = { x: 0, z: 0 };
@@ -153,14 +155,14 @@ export function createController({ canvas, camera, character, obstacles, terrain
 
   function reset() {
     clearInput();
-    const height = groundHeight(0, 4);
+    const height = groundHeight(spawn.x, spawn.z);
     jump = { y: height, verticalVelocity: 0, grounded: true };
     jumpMultiplier = 1;
-    yaw = 0;
+    yaw = spawn.yaw - Math.PI;
     pitch = INITIAL_PITCH;
-    character.position.set(0, height, 4);
-    character.rotation.y = Math.PI;
-    followTarget.set(0, height + FOLLOW_HEIGHT, 4);
+    character.position.set(spawn.x, height, spawn.z);
+    character.rotation.y = spawn.yaw;
+    followTarget.set(spawn.x, height + FOLLOW_HEIGHT, spawn.z);
     placeCamera();
     lastState = { moving: false, grounded: true, speed: 0, turnX: 0, turnY: 0 };
   }
@@ -189,7 +191,7 @@ export function createController({ canvas, camera, character, obstacles, terrain
     const direction = movementDirection(right, forward, yaw);
     const planar = advancePlanarVelocity(velocity, { x: direction.x * WALK_SPEED, z: direction.z * WALK_SPEED }, dt);
     velocity = planar.velocity;
-    const movement = advanceCharacterMovement(character.position, jump, planar.displacement, dt, jumpQueued, obstacles, groundSurface, jumpMultiplier);
+    const movement = advanceCharacterMovement(character.position, jump, planar.displacement, dt, jumpQueued, obstacles, groundSurface, jumpMultiplier, halfSize);
     const next = movement.position;
     const actualX = next.x - character.position.x;
     const actualZ = next.z - character.position.z;

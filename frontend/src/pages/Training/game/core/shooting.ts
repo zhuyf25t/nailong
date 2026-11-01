@@ -2,13 +2,20 @@ import * as THREE from 'three';
 import type { Target } from './scene';
 import { OBSTACLES } from './obstacles.ts';
 import { CRATE_HEIGHT } from './movement.ts';
+import type { Obstacle } from './movement.ts';
 import { WORLD_TERRAIN_HALF_SIZE } from './worldLayout.ts';
 import { firstProjectileImpact, type ProjectileBox, type ProjectileTarget } from './shootingMath.ts';
 import { DEFAULT_WEAPON_CONFIG, type WeaponConfig } from './defaultRules.ts';
 
 const FLASH_SECONDS = 0.055;
 
-export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (target: Target) => void, terrain?: { sampleHeight(x: number, z: number): number }, config: WeaponConfig = DEFAULT_WEAPON_CONFIG) {
+export interface ShootingOptions {
+  obstacles?: readonly Obstacle[];
+  onShot?: (shot: { id: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number } }) => void;
+  onImpact?: (impact: { projectileId: string; targetIndex: number | null; position: { x: number; y: number; z: number }; kind: 'target' | 'obstacle' | 'terrain' }) => void;
+}
+export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (target: Target) => void, terrain?: { sampleHeight(x: number, z: number): number }, config: WeaponConfig = DEFAULT_WEAPON_CONFIG, options: ShootingOptions = {}) {
+  const obstacles = options.obstacles ?? OBSTACLES;
   const fireInterval = config.fireIntervalMs / 1000;
   // Capacity follows projectile lifetime and cadence rather than imposing a hidden rate limit.
   const bulletCapacity = Math.max(2, Math.ceil(config.projectileRange / config.projectileSpeed / fireInterval) + 2);
@@ -34,7 +41,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
     trail.position.z = -0.27;
     root.add(core, trail);
     effects.add(root);
-    return { root, velocity: new THREE.Vector3(), active: false, distance: 0, radius: 0.13, targetRadius: 0.68 };
+    return { id: '', root, velocity: new THREE.Vector3(), active: false, distance: 0, radius: 0.13, targetRadius: 0.68 };
   });
   const particles = Array.from({ length: 48 }, () => {
     const mesh = new THREE.Mesh(sparkGeometry, trailMaterial);
@@ -49,7 +56,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
     return { mesh, life: 0 };
   });
   const collisionTargets: ProjectileTarget[] = targets.map(target => ({ center: target.center, active: true }));
-  const collisionBoxes: ProjectileBox[] = OBSTACLES.map(o => ({ min: { x: o.x - o.halfX, y: 0, z: o.z - o.halfZ }, max: { x: o.x + o.halfX, y: CRATE_HEIGHT, z: o.z + o.halfZ } }));
+  const collisionBoxes: ProjectileBox[] = [];
   const sampleHeight = (x: number, z: number) => terrain?.sampleHeight(x, z) ?? 0;
   const forward = new THREE.Vector3(0, 0, 1);
   const shotDirection = new THREE.Vector3();
@@ -59,6 +66,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
   let cooldown = 0;
   let particleCursor = 0;
   let flashCursor = 0;
+  let shotSequence = 0;
 
   function fire(origin: THREE.Vector3, direction: THREE.Vector3) {
     if (cooldown > 0 || direction.lengthSq() < 1e-12) return false;
@@ -67,6 +75,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
     cooldown = fireInterval;
     shotDirection.copy(direction).normalize();
     bullet.active = true;
+    bullet.id = `projectile-${++shotSequence}`;
     bullet.distance = 0;
     bullet.radius = bubbleBoost ? 0.24 : 0.13;
     bullet.targetRadius = bubbleBoost ? 0.78 : 0.68;
@@ -82,6 +91,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
     flash.mesh.position.copy(origin).addScaledVector(shotDirection, 0.065);
     flash.mesh.quaternion.copy(bullet.root.quaternion);
     flash.mesh.scale.set(0.8, 0.8, 1.55);
+    options.onShot?.({ id: bullet.id, position: { x: origin.x, y: origin.y, z: origin.z }, velocity: { x: bullet.velocity.x, y: bullet.velocity.y, z: bullet.velocity.z } });
     return true;
   }
 
@@ -107,11 +117,11 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
       target.pulse = Math.max(0, target.pulse - dt * 3.5);
       collisionTargets[i].active = target.alive && target.cooldown <= 0;
     }
-    for (let i = 0; i < OBSTACLES.length; i++) {
-      const obstacle = OBSTACLES[i];
+    collisionBoxes.length = obstacles.length;
+    for (let i = 0; i < obstacles.length; i++) {
+      const obstacle = obstacles[i];
       const bottom = sampleHeight(obstacle.x, obstacle.z);
-      collisionBoxes[i].min.y = bottom;
-      collisionBoxes[i].max.y = bottom + (obstacle.height ?? CRATE_HEIGHT);
+      collisionBoxes[i] = { min: { x: obstacle.x - obstacle.halfX, y: bottom, z: obstacle.z - obstacle.halfZ }, max: { x: obstacle.x + obstacle.halfX, y: bottom + (obstacle.height ?? CRATE_HEIGHT), z: obstacle.z + obstacle.halfZ } };
     }
     for (const bullet of bullets) {
       if (!bullet.active) continue;
@@ -124,6 +134,7 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
       if (impact) {
         impactPoint.copy(before).lerp(bullet.root.position, impact.time);
         emitImpact(impactPoint, impact.kind === 'target');
+        options.onImpact?.({ projectileId: bullet.id, targetIndex: impact.kind === 'target' ? impact.index : null, position: { x: impactPoint.x, y: impactPoint.y, z: impactPoint.z }, kind: impact.kind === 'target' ? 'target' : impact.kind === 'block' ? 'obstacle' : 'terrain' });
         if (impact.kind === 'target') {
           const target = targets[impact.index];
           target.cooldown = 0;
@@ -163,10 +174,12 @@ export function createShooting(scene: THREE.Scene, targets: Target[], onHit: (ta
     cooldown = 0;
     bubbleBoost = false;
     particleCursor = flashCursor = 0;
+    shotSequence = 0;
     targets.forEach(target => { target.alive = true; target.cooldown = 0; target.pulse = 0; target.root.visible = true; target.root.scale.setScalar(1); });
   }
   return {
     fire, update, reset,
+    snapshot() { return bullets.filter(bullet => bullet.active).map(bullet => ({ id: bullet.id, position: { x: bullet.root.position.x, y: bullet.root.position.y, z: bullet.root.position.z }, velocity: { x: bullet.velocity.x, y: bullet.velocity.y, z: bullet.velocity.z } })); },
     setBubbleBoost(active: boolean) { bubbleBoost = active; },
     dispose() {
       reset();

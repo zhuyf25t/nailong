@@ -42,11 +42,14 @@ function decodeItem(value: unknown, path = '$'): PendingResultItem {
   const item = decode.object(value, path);
   exactKeys(item, ['playerId', 'runId', 'submission'], path);
   const submission = decode.object(item.submission, `${path}.submission`);
-  exactKeys(submission, ['outcome', 'shotsFired', 'hits', 'destroyed', 'elapsedMs'], `${path}.submission`);
+  exactKeys(submission, ['outcome', 'shotsFired', 'hits', 'destroyed', 'elapsedMs',
+    ...(Object.hasOwn(submission, 'objectiveProgress') ? ['objectiveProgress'] : [])], `${path}.submission`);
+  const decoded = decodeResultSubmission(submission, `${path}.submission`);
   return Object.freeze({
     playerId: parsePlayerId(item.playerId, `${path}.playerId`),
     runId: parseRunId(item.runId, `${path}.runId`),
-    submission: Object.freeze(decodeResultSubmission(submission, `${path}.submission`)),
+    submission: Object.freeze({ ...decoded,
+      ...(decoded.objectiveProgress == null ? {} : { objectiveProgress: Object.freeze(decoded.objectiveProgress) }) }),
   });
 }
 
@@ -66,7 +69,9 @@ export function decodePendingResults(value: unknown): readonly PendingResultItem
 
 function sameSubmission(left: PendingResultItem['submission'], right: PendingResultItem['submission']): boolean {
   return left.outcome === right.outcome && left.shotsFired === right.shotsFired
-    && left.hits === right.hits && left.destroyed === right.destroyed && left.elapsedMs === right.elapsedMs;
+    && left.hits === right.hits && left.destroyed === right.destroyed && left.elapsedMs === right.elapsedMs
+    && (left.objectiveProgress?.beaconActivated ?? null) === (right.objectiveProgress?.beaconActivated ?? null)
+    && (left.objectiveProgress?.extracted ?? null) === (right.objectiveProgress?.extracted ?? null);
 }
 
 function failureOf(error: unknown): SaveFailure {

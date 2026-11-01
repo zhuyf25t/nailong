@@ -14,6 +14,8 @@ object TrainingRunTableInitializer:
       |config_version text not null,
       |config_json jsonb not null,
       |terrain_json jsonb not null,
+      |setup_json jsonb,
+      |selection_json jsonb,
       |status text not null check (status in ('open', 'completed', 'abandoned')),
       |started_at timestamptz not null,
       |completed_at timestamptz,
@@ -25,6 +27,9 @@ object TrainingRunTableInitializer:
   def initialize(connection: Connection): IO[Unit] = IO.blocking {
     Using.resource(connection.createStatement()) { statement =>
       statement.execute(initializeSql)
+      // Nullable additions preserve historical runs and may be applied repeatedly.
+      statement.execute("alter table training_runs add column if not exists setup_json jsonb")
+      statement.execute("alter table training_runs add column if not exists selection_json jsonb")
       ()
     }
   }

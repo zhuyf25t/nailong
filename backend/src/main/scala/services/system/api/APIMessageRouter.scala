@@ -17,7 +17,6 @@ import scala.util.Try
 
 object APIMessageRouter:
   private val logger = Slf4jLogger.getLogger[IO]
-  private val maxRequestBytes = 16384
 
   def routes(
     messages: List[RegisteredAPIMessage],
@@ -25,12 +24,13 @@ object APIMessageRouter:
     resolveToken: (String, Connection) => IO[AuthenticatedPlayer]
   ): HttpRoutes[IO] =
     require(messages.map(_.apiName).distinct.size == messages.size, "Duplicate API registration")
+    require(messages.forall(m => m.maxRequestBytes > 0 && m.maxRequestBytes <= 8 * 1024 * 1024), "Invalid API request budget")
     val byName = messages.map(message => message.apiName -> message).toMap
     HttpRoutes.of[IO] {
       case request @ POST -> Root / "api" / apiName => handleErrors {
         for
           message <- IO.fromOption(byName.get(apiName))(HttpError.notFound("API 不存在。"))
-          payload <- readPayload(request)
+          payload <- readPayload(request, message.maxRequestBytes)
           result <- database.transaction { connection =>
             for
               prepared <- preparePayload(message, payload, connection, resolveToken)
@@ -42,7 +42,7 @@ object APIMessageRouter:
       }
     }
 
-  private def readPayload(request: Request[IO]): IO[Json] =
+  private def readPayload(request: Request[IO], maxRequestBytes: Int): IO[Json] =
     request.body.take(maxRequestBytes + 1L).compile.toVector.flatMap { bytes =>
       if bytes.size > maxRequestBytes then IO.raiseError(HttpError.validation("请求过大。"))
       else
