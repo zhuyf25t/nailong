@@ -1,9 +1,9 @@
-; Soda Scramble - Godot 4 desktop project.
+; Third Shift Soda Works - Godot 4 desktop project.
 config_version=5
 
 [application]
-config/name="奶泡乱斗 · Soda Scramble"
-config/version="1.0"
+config/name="夜班只有三只"
+config/version="2.0"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 

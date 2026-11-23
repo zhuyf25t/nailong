@@ -16,6 +16,6 @@ try {
     if ($Serve) {
         $classpath = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'target/runtime-classpath.txt'))
         & $java '-Dfile.encoding=UTF-8' '-cp' $classpath soda.Main
-        if ($LASTEXITCODE -ne 0) { throw "Soda exited with $LASTEXITCODE" }
+        if ($LASTEXITCODE -ne 0) { throw "Night shift exited with $LASTEXITCODE" }
     }
 } finally { Pop-Location }

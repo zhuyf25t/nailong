@@ -42,13 +42,13 @@ function Test-SodaDatabase([string]$pg, [string]$cluster, [string]$pwFile, [int]
 
 function Start-SodaDb {
     $pg = Find-SodaPg
-    $dir = Join-Path $PSScriptRoot '.runtime'
+    $dir = Join-Path $PSScriptRoot '.night-runtime'
     $cluster = Join-Path $dir 'pg'
     $pwFile = Join-Path $dir 'local-db-password'
-    $port = 55437
+    $port = 55439
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     if (-not (Test-Path $pwFile)) {
-        if (Test-Path "$cluster/PG_VERSION") { throw 'Restore .runtime/local-db-password for the existing arena database.' }
+        if (Test-Path "$cluster/PG_VERSION") { throw 'Restore .night-runtime/local-db-password for the existing night shift database.' }
         $bytes = New-Object byte[] 32
         $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
         try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
@@ -65,7 +65,7 @@ function Start-SodaDb {
         $p = Start-Process -FilePath $launcher -ArgumentList $quoted -WindowStyle Hidden -PassThru
         $null = $p.Handle
         if (-not $p.WaitForExit(45000) -or $p.ExitCode -ne 0) {
-            throw "Could not start the project database on port $port. See .runtime/postgres.log."
+            throw "Could not start the project database on port $port. See .night-runtime/postgres.log."
         }
     }
     $env:SODA_JDBC_URL = "jdbc:postgresql://127.0.0.1:$port/postgres"
@@ -75,11 +75,11 @@ function Start-SodaDb {
 
 function Stop-SodaDb {
     $pg = Find-SodaPg
-    $cluster = Join-Path $PSScriptRoot '.runtime/pg'
-    $pwFile = Join-Path $PSScriptRoot '.runtime/local-db-password'
-    if ((Test-Path "$cluster/PG_VERSION") -and (Test-SodaDatabase $pg $cluster $pwFile 55437)) {
+    $cluster = Join-Path $PSScriptRoot '.night-runtime/pg'
+    $pwFile = Join-Path $PSScriptRoot '.night-runtime/local-db-password'
+    if ((Test-Path "$cluster/PG_VERSION") -and (Test-SodaDatabase $pg $cluster $pwFile 55439)) {
         & (Join-Path $pg 'pg_ctl.exe') -D $cluster -w -t 30 -m fast stop
-        if ($LASTEXITCODE -ne 0 -or (Test-SodaDatabase $pg $cluster $pwFile 55437)) {
+        if ($LASTEXITCODE -ne 0 -or (Test-SodaDatabase $pg $cluster $pwFile 55439)) {
             throw 'The project database is still running or could not be stopped.'
         }
     }

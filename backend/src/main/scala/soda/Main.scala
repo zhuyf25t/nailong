@@ -11,14 +11,16 @@ import org.http4s.circe.*
 import org.http4s.dsl.io.*
 import org.http4s.ember.server.EmberServerBuilder
 import scala.concurrent.duration.*
-import scala.io.Source
-import scala.util.Using
 import soda.identity.{Accounts, Identities}
 import soda.infrastructure.{Database,Http,Sql}
-import soda.rooms.{Results,Rooms}
-import soda.sim.Arena
+import soda.night.{NightJournal,NightShifts}
 
 object Main extends IOApp.Simple:
+  private def bindPort: IO[Port] = sys.env.get("SODA_HTTP_PORT") match
+    case None => IO.pure(port"8738")
+    case Some(raw) => IO.fromOption(raw.toIntOption.filter(n => n >= 1 && n <= 65535).flatMap(Port.fromInt))(
+      new IllegalArgumentException("SODA_HTTP_PORT must be an integer between 1 and 65535"))
+
   private def bindHost: IO[Ipv4Address] = IO.blocking {
     sys.env.get("SODA_BIND_HOST") match
       case None => ipv4"127.0.0.1"
@@ -39,14 +41,14 @@ object Main extends IOApp.Simple:
       }
       poll
 
-  private def app(db: Database, accounts: Accounts, rooms: Rooms): HttpApp[IO] =
+  private def app(db: Database, accounts: Accounts, shifts: NightShifts): HttpApp[IO] =
     val health = HttpRoutes.of[IO] { case GET -> Root / "health" =>
       db.transaction(c => Sql.statement(c,"SELECT 1")(s => Sql.first(s)(_.getInt(1)))).attempt.flatMap {
-        case Right(Some(1)) => Ok(Json.obj("status" -> Json.fromString("ok"), "game" -> Json.fromString("soda")))
+        case Right(Some(1)) => Ok(Json.obj("status" -> Json.fromString("ok"), "game" -> Json.fromString("nightshift")))
         case _ => Http.error(Status.ServiceUnavailable,"db_unavailable","数据库暂时不可用。")
       }
     }
-    val router = health <+> new Routes(accounts,rooms).all
+    val router = health <+> new Routes(accounts,shifts).all
     cats.data.Kleisli { req =>
       router.run(req).value.flatMap(_.fold(Http.error(Status.NotFound,"not_found","接口不存在。"))(IO.pure))
         .handleErrorWith(e => IO.println(s"Request failed: ${e.getClass.getSimpleName}") *>
@@ -55,13 +57,10 @@ object Main extends IOApp.Simple:
 
   val run: IO[Unit] = (for
     host <- Resource.eval(bindHost)
-    arena <- Resource.eval(IO.blocking {
-      val raw = Using.resource(Source.fromResource("arena.json")(using scala.io.Codec.UTF8))(_.mkString)
-      Arena.fromJson(raw).fold(msg => throw new IllegalArgumentException(msg), arena => arena)
-    })
+    port <- Resource.eval(bindPort)
     db <- Database.resource
-    _ <- Resource.eval(db.transaction { c => Identities.initialize(c); Results.initialize(c) })
-    rooms <- Rooms.start(arena,new Results(db))
-    _ <- EmberServerBuilder.default[IO].withHost(host).withPort(port"8737")
-      .withHttpApp(app(db,new Accounts(db),rooms)).build
+    _ <- Resource.eval(db.transaction { c => Identities.initialize(c); NightJournal.initialize(c) })
+    shifts <- NightShifts.resource(new NightJournal(db))
+    _ <- EmberServerBuilder.default[IO].withHost(host).withPort(port)
+      .withHttpApp(app(db,new Accounts(db),shifts)).build
   yield ()).use(_ => awaitStop)

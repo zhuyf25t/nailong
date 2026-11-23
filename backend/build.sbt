@@ -1,7 +1,7 @@
 ThisBuild / scalaVersion := "3.3.3"
 ThisBuild / organization := "edu.sodascramble"
 ThisBuild / version := "1.0.0"
-name := "soda-scramble"
+name := "three-on-the-night-shift"
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-effect" % "3.5.4",
   "org.http4s" %% "http4s-dsl" % "0.23.27",
@@ -17,7 +17,6 @@ libraryDependencies ++= Seq(
 )
 scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Werror", "-encoding", "UTF-8")
 Compile / run / mainClass := Some("soda.Main")
-Compile / unmanagedResourceDirectories += baseDirectory.value.getParentFile / "game" / "data"
 Test / parallelExecution := false
 
 lazy val prepareLaunch = taskKey[File]("Compile the application and write its runtime classpath")

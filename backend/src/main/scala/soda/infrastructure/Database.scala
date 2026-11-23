@@ -24,7 +24,7 @@ final class Database private (pool: HikariDataSource):
 object Database:
   def resource: Resource[IO, Database] = Resource.fromAutoCloseable(IO.blocking {
     val cfg = new HikariConfig()
-    cfg.setJdbcUrl(sys.env.getOrElse("SODA_JDBC_URL", "jdbc:postgresql://127.0.0.1:55437/postgres"))
+    cfg.setJdbcUrl(sys.env.getOrElse("SODA_JDBC_URL", "jdbc:postgresql://127.0.0.1:55439/postgres"))
     cfg.setUsername(sys.env.getOrElse("SODA_DB_USER", "soda"))
     cfg.setPassword(sys.env("SODA_DB_PASSWORD"))
     cfg.setMaximumPoolSize(5)

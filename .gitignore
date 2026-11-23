@@ -6,3 +6,4 @@ backend/project/project/
 game/.godot/
 __pycache__/
 *.blend1
+.night-runtime/

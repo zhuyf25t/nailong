@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
-$runtime = Join-Path $PSScriptRoot '.runtime'
+$runtime = Join-Path $PSScriptRoot '.night-runtime'
 $stopFile = Join-Path $runtime 'server.stop'
 $pidFile = Join-Path $runtime 'launcher.pid'
 
 function Test-SodaRunning {
     try {
-        $health = Invoke-RestMethod 'http://127.0.0.1:8737/health' -TimeoutSec 2
-        return $health.game -eq 'soda'
+        $health = Invoke-RestMethod 'http://127.0.0.1:8738/health' -TimeoutSec 2
+        return $health.game -eq 'nightshift'
     } catch { return $false }
 }
 
@@ -22,4 +22,4 @@ if (Test-SodaRunning) {
     }
 }
 & (Join-Path $PSScriptRoot 'backend/stop-db.ps1')
-Write-Host 'Soda Scramble is stopped. The match history is saved.'
+Write-Host 'Night Shift is stopped. Completed nights are saved.'
