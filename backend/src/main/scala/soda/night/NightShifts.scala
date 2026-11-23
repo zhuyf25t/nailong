@@ -10,19 +10,28 @@ import scala.concurrent.duration.*
 import soda.identity.PlayerId
 
 private[night] final case class Shift(id: RunId, world: NightWorld, ack: Long, held: NightInput,
-                                     actions: Queue[NightInput], inputAt: Long, seenAt: Long):
-  def snapshot: Json = NightWire.snapshot(world, id.uuid, ack)
+                                     actions: Queue[NightInput], inputAt: Long, seenAt: Long, paused: Boolean = false):
+  def snapshot: Json = NightWire.snapshot(world, id.uuid, ack, paused)
   def submit(seq: InputSequence, input: NightInput, pulse: Long): Either[NightProblem,Shift] =
     if seq.value <= ack then Right(copy(seenAt = pulse))
-    else if input.action != NightAction.Idle && actions.size >= 16 then Left(NightProblem.Busy)
     else
-      val queued = if input.action == NightAction.Idle then actions else actions.enqueue(input)
-      Right(copy(ack = seq.value, held = input.withoutAction, actions = queued, inputAt = pulse, seenAt = pulse))
+      val accepted = copy(ack = seq.value, seenAt = pulse)
+      input.action match
+        case NightAction.Pause | NightAction.Resume =>
+          val target = input.action == NightAction.Pause
+          if target == paused then Right(accepted)
+          else Right(accepted.copy(paused = target, held = NightInput.idle, actions = Queue.empty, inputAt = pulse))
+        case _ if paused => Right(accepted)
+        case NightAction.Idle => Right(accepted.copy(held = input, inputAt = pulse))
+        case _ if actions.size >= 16 => Left(NightProblem.Busy)
+        case _ => Right(accepted.copy(held = input.withoutAction, actions = actions.enqueue(input), inputAt = pulse))
 
   def advance(pulse: Long): Shift =
-    val (input, pending) = actions.dequeueOption.getOrElse(
-      (if pulse - inputAt <= 6 then held else NightInput.idle, Queue.empty))
-    copy(world = NightEngine.step(world, input), actions = pending)
+    if paused then this
+    else
+      val (input, pending) = actions.dequeueOption.getOrElse(
+        (if pulse - inputAt <= 6 then held else NightInput.idle, Queue.empty))
+      copy(world = NightEngine.step(world, input), actions = pending)
 
 private final case class Shifts(active: Map[PlayerId,Shift], pending: Map[RunId,Clear], pulse: Long):
   def advance: Shifts =

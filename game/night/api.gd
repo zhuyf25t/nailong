@@ -31,6 +31,7 @@ var _next_sample := 0
 var _seq := 0
 var _start_id := ""
 var _start_night := 0
+var _manual_pause := false
 
 func _ready() -> void:
 	var configured := OS.get_environment("SODA_API_URL").strip_edges().trim_suffix("/")
@@ -79,8 +80,14 @@ func stop_run() -> void:
 		_cancel()
 	controls.release_all()
 	current = {}
+	_manual_pause = false
 	_start_id = ""
 	_seq = 0
+
+func set_manual_pause(value: bool) -> void:
+	controls.release_all()
+	_manual_pause = value
+	_next_sample = 0
 
 func logout() -> void:
 	_cancel()
@@ -105,8 +112,14 @@ func _process(_delta: float) -> void:
 		return
 	if current.is_empty() or Wire.terminal(current) or now < _next_sample:
 		return
-	_next_sample = now + SAMPLE_MS
-	_begin(Op.SAMPLE, "/v1/night/run/%s/input" % current.runId, controls.sample(_seq))
+	var paused: bool = current.paused
+	_next_sample = now + (1000 if paused and _manual_pause else SAMPLE_MS)
+	var sample := controls.sample(_seq)
+	if _manual_pause or paused:
+		sample.mx = 0.0
+		sample.my = 0.0
+		sample.action = ("pause" if _manual_pause else "resume") if paused != _manual_pause else "none"
+	_begin(Op.SAMPLE, "/v1/night/run/%s/input" % current.runId, sample)
 
 func _begin(op: Op, path: String, payload: Dictionary = {}) -> void:
 	_op = op
@@ -194,6 +207,7 @@ func _complete(result: int, status: int, _headers: PackedStringArray, body: Pack
 			_seq = view.ack + 1
 			if kind == Op.START:
 				_start_id = ""
+				_manual_pause = false
 				_next_sample = Time.get_ticks_msec()
 				shift_started.emit(view)
 			changed.emit(view)

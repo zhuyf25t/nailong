@@ -21,6 +21,7 @@ var _guest_saved := false
 var _guest_path := ""
 var _settings := ConfigFile.new()
 const OPTIONS_PATH := "user://night-options.cfg"
+var _night_after_rules := 0
 
 func _ready() -> void:
 	add_child(api)
@@ -34,6 +35,8 @@ func _ready() -> void:
 	ui.leave_requested.connect(_roster)
 	ui.logout_requested.connect(_logout)
 	ui.mute_requested.connect(_mute)
+	ui.rules_requested.connect(_open_rules)
+	ui.rules_closed.connect(_close_rules)
 	api.notice.connect(ui.set_notice)
 	api.busy_changed.connect(ui.set_busy)
 	api.identity_lost.connect(_title)
@@ -111,12 +114,16 @@ func _logout() -> void:
 	_title()
 
 func _title() -> void:
+	_night_after_rules = 0
+	ui.hide_rules()
 	page = "title"
 	audio.menu()
 	ui.set_guest_name(str(_guest.get_value("guest","name","")))
 	ui.show_title()
 
 func _roster() -> void:
+	_night_after_rules = 0
+	ui.hide_rules()
 	api.stop_run()
 	if api.nickname.is_empty():
 		_title()
@@ -135,8 +142,42 @@ func _on_profile() -> void:
 	ui.show_roster(api.profile_data, api.nickname)
 
 func _start(night: int) -> void:
-	if page in ["roster","result"]:
+	if page not in ["roster","result"] or ui.rules_open():
+		return
+	if not _settings.get_value("handbook", _reader_key(), false):
+		_night_after_rules = night
+		ui.show_rules("明白了，开始试工" if night == 1 else "明白了，开始本班")
+		return
+	api.start(night)
+
+func _reader_key() -> String:
+	return (api.base_url + "|" + api.nickname).sha256_text()
+
+func _open_rules() -> void:
+	if ui.rules_open():
+		return
+	match page:
+		"title": ui.show_rules("返回首页")
+		"roster": ui.show_rules("返回名册")
+		"play":
+			_blur()
+			api.set_manual_pause(true)
+			ui.show_rules("返回本班")
+
+func _close_rules() -> void:
+	if not ui.rules_open():
+		return
+	ui.hide_rules()
+	if _night_after_rules > 0:
+		var night := _night_after_rules
+		_night_after_rules = 0
+		_settings.set_value("handbook", _reader_key(), true)
+		_settings.save(OPTIONS_PATH)
 		api.start(night)
+	elif page == "play":
+		api.set_manual_pause(false)
+		_cursor = Vector2(-1, -1)
+		_focused = true
 
 func _enter(_view: Dictionary) -> void:
 	page = "play"
@@ -150,6 +191,7 @@ func _on_view(view: Dictionary) -> void:
 	audio.set_view(view)
 	if Wire.terminal(view):
 		_blur()
+		ui.hide_rules()
 		page = "result"
 		ui.show_result(view, api.profile_data)
 		api.refresh_profile()
@@ -202,6 +244,6 @@ func _input(event: InputEvent) -> void:
 		if not FACTORY_BOUNDS.has_point(at):
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			api.controls.press("throw", _direction(at))
+			api.controls.press("throw", _direction(world.delivery_target(at)))
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			api.controls.press("probe", _direction(at))

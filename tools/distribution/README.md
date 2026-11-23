@@ -27,7 +27,7 @@ py -3 tools/distribution/build.py
 py -3 tools/distribution/build.py --jdk C:\Tools\jdk-21 --godot C:\Tools\Godot.exe --postgres C:\Tools\PostgreSQL --output C:\Build\NightShift
 ```
 
-在课程工作区，输出位于 `output/night-shift`，文件名为 `Only-Three-on-Shift-Windows-x64.zip`。同目录的 `.sha256` 文件可与 `Get-FileHash` 的结果比对。已由同一源码执行过 `prepareLaunch` 时可加 `--use-compiled`。在解压目录运行以下两次验收：第一次验证真实三次投递和解锁，第二次核对上回的通关记录并重新完成第一夜。
+在课程工作区，输出位于 `output/night-shift`，文件名为 `Only-Three-on-Shift-Windows-x64.zip`。同目录的 `.sha256` 文件可与 `Get-FileHash` 的结果比对。已由同一源码执行过 `prepareLaunch` 时可加 `--use-compiled`。在解压目录运行以下两次验收。第一次从登录、名册进入独立的首次规则页，检查四页规则、首单瞄准提示、局内打开手册时服务器冻结、三次投递与解锁。第二次核对上回的通关记录并重新完成第一夜。测试使用专用 Godot 设置目录，玩家的手册已读标记保存在自己的设置中。
 
 ```powershell
 .\Play.cmd -QuickCheck

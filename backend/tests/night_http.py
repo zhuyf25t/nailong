@@ -106,7 +106,8 @@ def ticket(night):
 
 
 def run(all_nights=False, wait_restart=False):
-    assert call("/health") == {"status": "ok", "game": "nightshift"}
+    health = call("/health")
+    assert health["status"] == "ok" and health["game"] == "nightshift" and health["rulesPause"] is True
     credentials = account()
     token = call("/v1/sessions", credentials)["token"]
     foreign = call("/v1/sessions", account())["token"]
@@ -133,6 +134,16 @@ def run(all_nights=False, wait_restart=False):
     confirmed = eventually(one.read, lambda v: v["event"] == "probe")
     time.sleep(0.24)
     assert one.read()["eventId"] == confirmed["eventId"]
+    separate = Driver(foreign, call(start, ticket(1), foreign))
+    paused = one.send("pause")
+    assert paused["paused"] is True
+    other_tick = separate.read()["tick"]
+    one.send("throw", (1, 0))
+    one.send()
+    eventually(separate.read, lambda v: v["tick"] >= other_tick + 4)
+    assert one.read()["tick"] == paused["tick"] and one.read()["bottle"] is None
+    assert one.send("resume")["paused"] is False
+    eventually(one.read, lambda v: v["tick"] > paused["tick"])
     one.finish()
     assert call("/v1/night/profile", token=token) == {"unlocked": 2, "cleared": [1], "bestClean": 3}
     other = Driver(token, call(start, ticket(2), token))

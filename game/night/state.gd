@@ -82,6 +82,8 @@ static func snapshot(raw: Variant) -> Dictionary:
 	for key in ["dim", "bank", "latched"]:
 		if typeof(raw.get(key)) != TYPE_BOOL:
 			return {}
+	if typeof(raw.get("paused", false)) != TYPE_BOOL:
+		return {}
 	var player: Variant = raw.get("player")
 	if typeof(player) != TYPE_DICTIONARY or not _number(player.get("x"), 16, 464) or not _number(player.get("y"), 98, 267):
 		return {}
@@ -122,7 +124,7 @@ static func snapshot(raw: Variant) -> Dictionary:
 	# Build the validated wire view once. JSON integers can arrive as floats in Godot.
 	var view := {"runId":str(raw.runId), "phase":str(raw.phase), "event":str(raw.event), "memory":str(raw.memory),
 		"probe":str(raw.probe), "lever":str(raw.lever), "player":{"x":float(player.x),"y":float(player.y)},
-		"windows":windows, "bottle":null, "chase":null}
+		"windows":windows, "bottle":null, "chase":null, "paused":bool(raw.get("paused", false))}
 	for key in ["ack", "tick", "night", "order", "delivered", "eventId", "probeTicks", "escapeTicks", "pressure", "belt"]:
 		view[key] = int(raw[key])
 	for key in ["dim", "bank", "latched"]:

@@ -2,9 +2,11 @@ extends SceneTree
 
 ## Black-box campaign test. Decisions use the same rendered cues and geometry as a player.
 ## A graphical run accepts -- --capture-dir=<directory>. No test endpoints or game state writes.
+## Use -- --tutorial-only for the first-night onboarding regression.
 
 var app: Node
 var capture_dir := ""
+var tutorial_only := false
 var halted := false
 var last_notice := ""
 var campaign_clears: Array[int] = []
@@ -21,9 +23,18 @@ const INPUTS := ["night_left", "night_right", "night_up", "night_down"]
 const WINDOWS := [104.0, 240.0, 376.0]
 
 func _initialize() -> void:
+	# The production scene reads/writes its preferences on startup. Keep every
+	# test login, rules acknowledgement and mute toggle outside the player's user://.
+	ProjectSettings.set_setting("application/config/use_custom_user_dir", true)
+	ProjectSettings.set_setting("application/config/custom_user_dir_name", "OnlyThreeOnShift-QA")
+	if DirAccess.make_dir_recursive_absolute(OS.get_user_data_dir()) != OK:
+		call_deferred("_fail", "could not create the isolated QA preferences directory")
+		return
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
-		if args[i].begins_with("--capture-dir="):
+		if args[i] == "--tutorial-only":
+			tutorial_only = true
+		elif args[i].begins_with("--capture-dir="):
 			capture_dir = args[i].trim_prefix("--capture-dir=")
 		elif args[i] == "--capture-dir" and i + 1 < args.size():
 			capture_dir = args[i + 1]
@@ -138,11 +149,50 @@ func _login() -> bool:
 	if not await _press("LoginButton"): return false
 	return await _until(func(): return _page() == "roster" and not _profile().is_empty(), 12, "profile received")
 
+func _review_from_menu(source: String) -> bool:
+	if not await _press("RulesButton") or not await _press("RulesTab4"): return false
+	var page_number := _find("RulesPageNumber") as Label
+	if page_number == null or not page_number.is_visible_in_tree() or not page_number.text.contains("4"): return _fail("cannot review the last rules page from " + source)
+	if not await _press("RulesContinueButton"): return false
+	if _page() != source or not _state().is_empty(): return _fail("reviewing rules started a shift from " + source)
+	return true
+
 func _enter_night(night: int) -> bool:
 	if not await _press("Night%d" % night) or not await _press("StartButton"): return false
+	if not await _until(func(): return _ready_button("RulesContinueButton") or _page() == "play", 12, "show rules or start a previously learned shift"): return false
+	if _ready_button("RulesContinueButton"):
+		if not campaign_clears.is_empty(): return _fail("reader was forced through the rulebook again")
+		var headline := _find("RulesPageTitle") as Label
+		if headline == null or not headline.is_visible_in_tree() or headline.text.is_empty(): return _fail("missing rulebook heading")
+		if not await _press("RulesNextButton") or not await _press("RulesPrevButton"): return false
+		if _page() == "play" or not _state().is_empty(): return _fail("rules should precede the first active order")
+		if not await _press("RulesContinueButton"): return false
+	elif night == 1 and campaign_clears.is_empty():
+		return _fail("first-time player entered the shift without seeing the rules")
 	return await _until(func():
 		return _page() == "play" and _state().get("night", 0) == night and _phase() == "serving",
 		12, "start night %d" % night)
+
+func _manual_pause() -> bool:
+	if not await _press("RulesButton"): return false
+	if not await _until(func(): return _ready_button("RulesContinueButton") and _state().get("paused", false), 5, "authoritative rulebook pause"): return false
+	var frozen_tick := int(_state().tick)
+	var frozen_pressure := int(_state().pressure)
+	var initial_ack := int(_state().ack)
+	if frozen_pressure <= 0: return _fail("night two should have a timed bottle")
+	if not await _press("RulesTab2"): return false
+	await create_timer(1.2).timeout
+	if not await _until(func(): return int(_state().ack) > initial_ack, 2, "fresh paused snapshot from the server"): return false
+	if _state().tick != frozen_tick or _state().pressure != frozen_pressure: return _fail("clock or bottle pressure advanced during rulebook review")
+	if not await _press("RulesContinueButton"): return false
+	if not await _until(func(): return not _state().get("paused", true) and int(_state().tick) > frozen_tick and int(_state().pressure) < frozen_pressure, 5, "closing the rulebook resumes the game"): return false
+	print("Night rulebook verified: server clock and pressure frozen at ", frozen_tick, "/", frozen_pressure, ", then resumed")
+	return true
+
+func _replay_first_night() -> bool:
+	if not await _enter_night(1): return false
+	if not await _press("LeaveButton") or not await _press("ConfirmLeaveButton"): return false
+	return await _until(func(): return _page() == "roster" and _state().is_empty(), 8, "replay returns to the roster")
 
 func _probe(side: String) -> bool:
 	var pilot := _position()
@@ -175,6 +225,32 @@ func _throw(slot: int, bank: bool) -> void:
 	var ray := (target - pilot).normalized()
 	_click_world(pilot + ray * 74.0, MOUSE_BUTTON_LEFT)
 
+func _training_orders() -> bool:
+	var side := Vector2(428, 151)
+	if not await _move_to(side, func(): return _position().distance_to(side) < 8, "walk to the side of the counter"): return false
+	var settled_tick := int(_state().tick) + 5
+	if not await _until(func(): return int(_state().tick) >= settled_tick, 2, "release movement before aiming"): return false
+	# Both points are on a recipient's upper body. From this angle the raw ray to
+	# the middle figure misses its catch zone by over 40 pixels.
+	var closed_body := Vector2(384, 46)
+	var expected := (closed_body - _position()).normalized()
+	_click_world(closed_body, MOUSE_BUTTON_LEFT)
+	if not await _until(func(): return _state().get("bottle") is Dictionary, 3, "projectile fired at closed window"): return false
+	var bottle: Dictionary = _state().bottle
+	var actual := Vector2(bottle.vx, bottle.vy).normalized()
+	if actual.distance_to(expected) > 0.02: return _fail("closed window attracted the throw")
+	if not await _until(func(): return _state().event == "miss", 4, "closed window should miss"): return false
+	if int(_state().delivered) != 0: return _fail("closed window signed a receipt")
+	for order in range(1, 4):
+		if _phase() != "serving" or int(_state().order) != order or _state().probe != "none":
+			return _fail("first-night delivery must work without a cap probe")
+		if order == 1: await _capture("03-first-order")
+		_click_world(Vector2(249, 46), MOUSE_BUTTON_LEFT)
+		if not await _until(func(): return int(_state().delivered) == order, 5, "body click should deliver from an oblique angle"): return false
+	if _phase() != "clockout": return _fail("three bottles should open the south exit")
+	print("Night tutorial verified: 0 probes, closed shutter raw trajectory, 3 body clicks from ", _position())
+	return true
+
 func _service_order(night: int, order: int) -> bool:
 	var start := _state()
 	if int(start.get("order", 0)) != order or start.get("phase") != "serving": return _fail("unexpected ticket")
@@ -184,7 +260,6 @@ func _service_order(night: int, order: int) -> bool:
 	for win: Dictionary in _state().windows:
 		if win.look == _state().probe: matching += 1
 	if slot < 0 or matching != 1: return _fail("probe should distinguish exactly one recipient")
-	if night == 1 and order == 1: await _capture("03-first-order")
 	if night == 3 and order == 1: await _capture("04-echo")
 	if night == 5 and order == 1: await _capture("07-three-windows")
 	var bank := bool(_state().bank)
@@ -269,11 +344,18 @@ func _run() -> void:
 	if api.has_signal("notice"): api.connect("notice", func(msg: String): last_notice = msg)
 	if not await _until(func(): return _ready_button("AccountButton"), 5, "title"): return
 	await _capture("01-title")
+	if not await _review_from_menu("title"): return
 	account_password = Crypto.new().generate_random_bytes(15).hex_encode()
 	account_name = "试映员" + account_password.left(9)
 	if not await _login(): return
 	if _profile().get("unlocked") != 1 or not _profile().get("cleared", []).is_empty(): _fail("fresh profile"); return
 	await _capture("02-roster")
+	if not await _review_from_menu("roster"): return
+	if tutorial_only:
+		if not await _enter_night(1) or not await _training_orders() or not await _win(1): return
+		if not await _press("LogoutButton") or not await _login() or not await _replay_first_night(): return
+		await _finish("Night tutorial playthrough PASS · 3 receipts without probing, south exit, night 2 unlocked, remembered rulebook")
+		return
 	var mute := _find("MuteButton") as Button
 	restore_sound = mute.text.contains("开")
 	if restore_sound and not await _press("MuteButton"): return
@@ -281,11 +363,10 @@ func _run() -> void:
 	for night in range(1, 9):
 		if not await _enter_night(night): return
 		if night == 1:
-			var origin := _position()
-			if not await _move_to(origin + Vector2(24, 0), func(): return _position().x > origin.x + 16, "walk with keyboard"): return
-			_click_world(_position() + Vector2(0, 36), MOUSE_BUTTON_LEFT)
-			if not await _until(func(): return _state().get("event") == "miss", 4, "miss can be tried again"): return
+			if not await _training_orders() or not await _win(1): return
+			continue
 		if night == 2:
+			if not await _manual_pause(): return
 			if not await _probe(str(_state().memory)): return
 			for win: Dictionary in _state().windows:
 				if win.look != _state().memory: _fail("echo matches old gesture"); return
@@ -299,7 +380,11 @@ func _run() -> void:
 	if not await _until(func(): return _profile().get("cleared", []).size() == 8 and _profile().get("bestClean") == 3, 9, "durable campaign record on fresh login"): return
 	if not has_bank or not saw_dim or not saw_belt or failure_branches != 2: _fail("missing campaign coverage"); return
 	await _capture("10-stamped-roster")
+	if not await _replay_first_night(): return
 	if restore_sound and not await _press("MuteButton"): return
+	await _finish("Night shift playthrough PASS · 8 nights, 24 deliveries, bounced bottle, blackout, conveyor, escape, capture, retry, re-login")
+
+func _finish(message: String) -> void:
 	_release_keys()
 	var audio: Node = app.get("audio")
 	if audio.has_method("shutdown"):
@@ -307,5 +392,5 @@ func _run() -> void:
 	app.queue_free()
 	await process_frame
 	await process_frame
-	print("Night shift playthrough PASS · 8 nights, 24 deliveries, bounced bottle, blackout, conveyor, escape, capture, retry, re-login")
+	print(message)
 	quit(0)

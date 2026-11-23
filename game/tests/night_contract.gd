@@ -2,6 +2,7 @@ extends SceneTree
 
 const Wire = preload("res://night/state.gd")
 const Sample = preload("res://night/input.gd")
+const Factory = preload("res://night/world.gd")
 var errors := 0
 
 func _initialize() -> void:
@@ -11,6 +12,13 @@ func _initialize() -> void:
 		"pressure":-1,"bank":false,"dim":false,"belt":0,"lever":"left","latched":false,"escapeTicks":0,
 		"bottle":null,"chase":null,"event":"start","eventId":0,"delivered":0}
 	_expect(not Wire.snapshot(JSON.parse_string(JSON.stringify(view))).is_empty(), "roundtrip")
+	var factory := Factory.new()
+	factory.set_view(Wire.snapshot(view))
+	_expect(factory.delivery_target(Vector2(248,45)) == Vector2(240,78), "recipient body aims at the catch line")
+	_expect(factory.delivery_target(Vector2(240,95)) == Vector2(240,78), "first-night teaching sign is clickable")
+	for point: Vector2 in [Vector2(104,45), Vector2(376,45), Vector2(12,124)]:
+		_expect(factory.delivery_target(point) == point, "closed shutters and bank rail retain free aim")
+	factory.free()
 	for pair: Array in [["runId","bad"],["phase","teleport"],["event","score_override"],["latched","false"],["pressure",-2],["ack",0.5],["windows",[]]]:
 		var bad := view.duplicate(true)
 		bad[pair[0]] = pair[1]

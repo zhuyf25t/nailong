@@ -6,8 +6,10 @@ const PLAYER_START := Vector2(240, 220)
 const LEFT_RAIL := 12.0
 const RIGHT_RAIL := 468.0
 const RECEIVE_Y := 78.0
+const TRAINING_TAG := Rect2(203, 87, 74, 17)
 
 var view: Dictionary = {}
+var _sign_font := SystemFont.new()
 var _from := PLAYER_START
 var _target := PLAYER_START
 var _facing := 0
@@ -42,6 +44,8 @@ var _echo_side := -1
 var _echo_in_clock := false
 
 func _ready() -> void:
+	_sign_font.font_names = PackedStringArray(["Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
+	_sign_font.font_weight = 650
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	clip_contents = true
@@ -61,6 +65,19 @@ func screen_to_world(global_point: Vector2) -> Vector2:
 
 func set_aim(world_point: Vector2) -> void:
 	_aim = world_point
+
+# The sprite stands behind the actual catch line. Clicking a visible recipient
+# is an instruction to aim at their sill, including from an oblique position.
+func delivery_target(cursor: Vector2) -> Vector2:
+	if view.is_empty() or view["phase"] != "serving":
+		return cursor
+	if int(view["night"]) == 1 and TRAINING_TAG.has_point(cursor):
+		return Vector2(240, RECEIVE_Y)
+	for window: Dictionary in view["windows"]:
+		var x := float(SLOTS[int(window["slot"])])
+		if Rect2(x - 35, 23, 70, 58).has_point(cursor):
+			return Vector2(x, RECEIVE_Y)
+	return cursor
 
 func _point(value: Dictionary) -> Vector2:
 	return Vector2(float(value["x"]), float(value["y"]))
@@ -205,6 +222,7 @@ func _draw() -> void:
 	hardware(str(view["lever"]), bool(view["latched"]), phase == "escaping", phase in ["clockout", "won"], _clock)
 	var p := _shown_player()
 	var active_aim := phase == "serving" and Rect2(Vector2.ZERO, WORLD).has_point(_aim)
+	_draw_floor_guidance(phase)
 	if active_aim:
 		_draw_aim(p)
 	var frame := (1 + (floori(_clock * 9.0) % 2)) if _moving else 0
@@ -282,7 +300,7 @@ func _draw_rail_lights() -> void:
 			box(cx, y + 7, 2, 2, COAL)
 
 func _draw_aim(p: Vector2) -> void:
-	var dir := (_aim - p).normalized()
+	var dir := (delivery_target(_aim) - p).normalized()
 	if dir.length_squared() < 0.1:
 		return
 	var start := p + dir * 15
@@ -308,6 +326,34 @@ func _draw_aim(p: Vector2) -> void:
 	dots(start, bank_pos, soft, ray_step)
 	dots(bank_pos, bank_pos + outgoing * t_end, Color(SEA, 0.72), ray_step)
 	box(bank_pos.x - 1, bank_pos.y - 1, 3, 3, WARM)
+
+func _guide_tag(center: Vector2, text: String, tint: Color) -> void:
+	var w := ceilf(_sign_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x) + 12.0
+	var left := clampf(roundf(center.x - w / 2.0), 2.0, WORLD.x - w - 2.0)
+	var top := roundf(center.y)
+	box(left, top, w, 16, INK)
+	box(left, top, w, 1, tint)
+	draw_string(_sign_font, Vector2(left + 6, top + 12), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, tint)
+
+func _draw_floor_guidance(phase: String) -> void:
+	if phase == "clockout" or (phase == "escaping" and view["latched"]):
+		_guide_tag(Vector2(240, 230), "走到南门打卡" if phase == "clockout" else "跑进南门", SEA)
+		return
+	if phase == "escaping":
+		var x := 46 if view["lever"] == "left" else 434
+		_guide_tag(Vector2(x, 183), "走近亮杆", WARM)
+		return
+	if phase != "serving":
+		return
+	if int(view["night"]) == 1 and view["bottle"] == null:
+		_brackets(Vector2(240, RECEIVE_Y), 34, 3, WARM)
+		line_px(Vector2(240, 81), Vector2(240, TRAINING_TAG.position.y), WARM)
+		_guide_tag(Vector2(240, TRAINING_TAG.position.y), "左键投这里", WARM)
+	for x in [46, 434]:
+		if int(view["night"]) == 1:
+			draw_string(_sign_font, Vector2(x - 24, 234), "备用拉杆", HORIZONTAL_ALIGNMENT_CENTER, 48, 8, Color(INK, 0.9))
+		if _aim.distance_to(Vector2(x, 218)) <= 18:
+			_guide_tag(Vector2(x, 193), "应急拉杆 · 待机", SEA)
 
 func _draw_flying_bottle() -> void:
 	var bottle: Variant = view["bottle"]

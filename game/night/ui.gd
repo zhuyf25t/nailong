@@ -8,8 +8,11 @@ signal start_requested(night:int)
 signal roster_requested
 signal leave_requested
 signal mute_requested(muted:bool)
+signal rules_requested
+signal rules_closed
 
 const Print = preload("res://night/ui_print.gd")
+const Rulebook = preload("res://night/rules.gd")
 const CAST := "res://assets/night/cast/"
 const TITLE_PATH := "res://assets/night/title.png"
 const LATCH_PATH := "res://assets/night/latch.webp"
@@ -17,8 +20,8 @@ const CLOCKOUT_PATH := "res://assets/night/clockout.webp"
 const BOTTLE_PATH := "res://assets/night/props/pressure_bottle.png"
 const NAMES := ["暖灯试工","第二扇窗","毛玻璃","隔离护栏","三个笑脸","停电预演","逆向流水线","最后一班"]
 const LESSONS := [
-	"取货窗只开一扇。先弹瓶盖，看清伙伴伸手的方向，再把汽水交给它。",
-	"两扇窗后站着一样的伙伴。把瓶盖弹向和交班记录相反的一边，观察谁跟上了。",
+	"鼠标瞄准上方 2 号窗的窗台，点左键送汽水。送满三瓶，走到下方南门打卡。",
+	"看上单瓶盖记录，把鼠标放到奶龙另一侧，点右键弹盖。把汽水投给伸手追这枚瓶盖的伙伴。",
 	"玻璃变得模糊。弹盖后留意窗内稍迟的伸手动作，再决定往哪边投。",
 	"隔板挡住直线路线。后两单要借侧墙反弹，把瓶子送到真伙伴手里。",
 	"三扇窗都亮起来。两个身影记着上单的方向，只有一个会追这枚瓶盖。",
@@ -37,6 +40,7 @@ var _notice_bg: ColorRect
 var _mute_button: Button
 var _world: Control
 var _dialog: Control
+var _manual: Control
 var _profile: Dictionary = {}
 var _player := ""
 var _guest_name := ""
@@ -48,7 +52,13 @@ var _last_tick := -1
 var _last_event_id := -1
 var _event_until := 0
 var _event_caption := ""
+var _last_order := 0
+var _last_delivered := 0
+var _probed_this_order := false
 var _hud: Dictionary[String,Label] = {}
+var _inspection: Control
+var _gauge: Control
+var _optional: Control
 var _pressure_bars: Array[ColorRect] = []
 var _portrait: TextureRect
 var _portrait_actor := ""
@@ -109,6 +119,8 @@ func _reset(mode:String) -> void:
 	_photo_path = ""
 	_sheet = p.area(self,0,0,1280,720,"NightPage")
 	p.art(_sheet,0,0,1280,720,"wall")
+	if rules_open():
+		_sheet.hide()
 
 func _top(section:String) -> void:
 	p.rect(_sheet,0,0,1280,54,Print.COAL)
@@ -117,6 +129,8 @@ func _top(section:String) -> void:
 	p.line(_sheet,74,6,142,41,"深夜汽水厂",24,Print.WHITE,1)
 	p.rect(_sheet,218,17,2,21,Print.RIM)
 	p.line(_sheet,236,5,250,42,section,17,Print.DULL)
+	if _screen in ["title","roster","play","result"]:
+		p.button(_sheet,888,9,121,35,"玩法说明","RulesButton",func(): rules_requested.emit(),2,15)
 	_mute_button = p.button(_sheet,1153,9,99,35,"","MuteButton",_toggle_mute,2,15)
 	_update_mute()
 
@@ -273,13 +287,44 @@ func _draw_roster() -> void:
 	_notices(28,620,1224)
 
 func gameplay_blocked() -> bool:
-	return _screen != "play" or is_instance_valid(_dialog)
+	return _screen != "play" or is_instance_valid(_dialog) or rules_open()
+
+func rules_open() -> bool:
+	return is_instance_valid(_manual)
+
+func show_rules(continue_label:String="返回游戏") -> void:
+	if rules_open():
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus:
+		focus.release_focus()
+	if is_instance_valid(_sheet):
+		_sheet.hide()
+	_manual = Rulebook.new()
+	_manual.name = "RulesManual"
+	_manual.z_index = 100
+	_manual.closed.connect(func(): rules_closed.emit())
+	add_child(_manual)
+	_manual.open(continue_label)
+
+func hide_rules() -> void:
+	if not rules_open():
+		return
+	var previous := _manual
+	_manual = null
+	remove_child(previous)
+	previous.queue_free()
+	if is_instance_valid(_sheet):
+		_sheet.show()
 
 func show_play(world:Control) -> void:
 	_reset("play")
 	_world = world
 	_last_tick = -1
 	_last_event_id = -1
+	_last_order = 0
+	_last_delivered = 0
+	_probed_this_order = false
 	_event_until = 0
 	_event_caption = ""
 	_top("出货间")
@@ -300,23 +345,34 @@ func show_play(world:Control) -> void:
 	p.line(ticket,17,13,166,45,"交班票",30,Print.INK,1)
 	p.line(ticket,160,24,83,27,"SHIFT",17,Print.MUTED_INK,2,HORIZONTAL_ALIGNMENT_RIGHT)
 	p.art(ticket,17,62,230,2,"rule",Print.MUTED_INK)
-	p.line(ticket,17,79,90,26,"当前订单",16,Print.MUTED_INK)
-	_hud["OrderValue"] = p.line(ticket,16,107,148,47,"01 / 03",30,Print.INK,2,HORIZONTAL_ALIGNMENT_LEFT,"OrderValue")
+	p.line(ticket,17,79,105,26,"已签收",17,Print.MUTED_INK)
+	_hud["OrderValue"] = p.line(ticket,16,107,148,47,"0 / 3",34,Print.INK,2,HORIZONTAL_ALIGNMENT_LEFT,"OrderValue")
 	_portrait = p.image(ticket,179,75,61,61,CAST+"frog_portrait.png")
 	_hud["ActorValue"] = p.line(ticket,141,133,115,28,"",15,Print.TEAL,1,HORIZONTAL_ALIGNMENT_CENTER,"ActorValue")
 	p.rect(ticket,16,169,232,2,Print.PAPER_SHADE)
-	p.line(ticket,17,183,223,25,"上单瓶盖方向",16,Print.MUTED_INK)
-	_hud["MemoryValue"] = p.line(ticket,15,211,235,48,"",30,Print.RED,1,HORIZONTAL_ALIGNMENT_LEFT,"MemoryValue")
-	p.line(ticket,17,273,119,26,"本次弹盖",16,Print.MUTED_INK)
-	_hud["ProbeValue"] = p.line(ticket,110,269,135,34,"",18,Print.INK,1,HORIZONTAL_ALIGNMENT_RIGHT,"ProbeValue")
-	p.art(ticket,17,315,231,2,"rule",Print.MUTED_INK)
-	_hud["ClockLabel"] = p.line(ticket,17,328,121,28,"瓶内压力",16,Print.MUTED_INK)
-	_hud["PressureValue"] = p.line(ticket,121,323,126,38,"",20,Print.INK,1,HORIZONTAL_ALIGNMENT_RIGHT,"PressureValue")
+	_hud["PhaseValue"] = p.line(ticket,17,181,232,38,"",24,Print.TEAL,1,HORIZONTAL_ALIGNMENT_LEFT,"PhaseValue")
+	_hud["TaskValue"] = p.paragraph(ticket,17,228,229,115,"",19,Print.INK)
+	_hud["TaskValue"].name = "TaskValue"
+	_inspection = p.area(ticket,0,351,260,94,"InspectionRecord")
+	p.art(_inspection,17,0,231,2,"rule",Print.MUTED_INK)
+	p.line(_inspection,17,12,131,29,"上单瓶盖记录",16,Print.MUTED_INK)
+	_hud["MemoryValue"] = p.line(_inspection,140,9,105,34,"",20,Print.RED,1,HORIZONTAL_ALIGNMENT_RIGHT,"MemoryValue")
+	p.line(_inspection,17,51,122,29,"本次试探",16,Print.MUTED_INK)
+	_hud["ProbeValue"] = p.line(_inspection,132,48,113,34,"",18,Print.INK,1,HORIZONTAL_ALIGNMENT_RIGHT,"ProbeValue")
+	_gauge = p.area(ticket,0,448,260,85,"PressureGauge")
+	p.rect(_gauge,16,0,232,2,Print.PAPER_SHADE)
+	_hud["ClockLabel"] = p.line(_gauge,17,13,121,28,"瓶内压力",16,Print.MUTED_INK)
+	_hud["PressureValue"] = p.line(_gauge,121,8,126,38,"",20,Print.INK,1,HORIZONTAL_ALIGNMENT_RIGHT,"PressureValue")
 	for i in 14:
-		_pressure_bars.append(p.rect(ticket,17+i*16,369,13,11,Print.PAPER_SHADE))
-	p.rect(ticket,16,399,232,2,Print.PAPER_SHADE)
-	_hud["PhaseValue"] = p.line(ticket,17,414,230,38,"",23,Print.TEAL,1,HORIZONTAL_ALIGNMENT_LEFT,"PhaseValue")
-	_hud["TaskValue"] = p.paragraph(ticket,17,459,229,91,"",17,Print.INK)
+		_pressure_bars.append(p.rect(_gauge,17+i*16,55,13,11,Print.PAPER_SHADE))
+	_optional = p.area(ticket,0,394,263,118,"OptionalPractice")
+	p.art(_optional,17,0,231,2,"rule",Print.PAPER_SHADE)
+	p.line(_optional,17,14,230,29,"选做 · 试弹瓶盖",16,Print.MUTED_INK,1)
+	_hud["OptionalProbe"] = p.paragraph(_optional,17,49,230,67,"",16,Print.MUTED_INK)
+	_hud["IdleLeverNote"] = p.line(ticket,17,506,235,31,"两侧地面是应急杆，平时不用。",15,Print.MUTED_INK,0,HORIZONTAL_ALIGNMENT_LEFT,"IdleLeverNote")
+	_inspection.hide()
+	_gauge.hide()
+	_optional.hide()
 	p.art(ticket,17,550,71,13,"barcode",Print.MUTED_INK)
 	p.line(ticket,105,542,140,30,"DELIVERY LOG",13,Print.MUTED_INK,2,HORIZONTAL_ALIGNMENT_RIGHT)
 	_footer("")
@@ -334,6 +390,9 @@ func update_play(view:Dictionary) -> void:
 	var tick := int(view.get("tick",0))
 	var pressure := int(view.get("escapeTicks",0)) if esc else int(view.get("pressure",-1))
 	var order := clampi(int(view.get("order",1)),1,3)
+	var delivered := clampi(int(view.get("delivered",0)),0,3)
+	var serving := phase == "serving"
+	var first := night == 1
 	var windows: Array = view.get("windows",[])
 	var actor := ""
 	if not windows.is_empty():
@@ -342,11 +401,25 @@ func update_play(view:Dictionary) -> void:
 		_portrait_actor = actor
 		_portrait.texture = p.texture(CAST+actor+"_portrait.png") if actor in ["egg","frog"] else null
 	_hud["NightTitle"].text = "第 %d 夜   /   %s" % [night,NAMES[night-1]]
-	_hud["OrderValue"].text = "%02d / 03"%order
-	_hud["ActorValue"].text = "奶蛋" if actor=="egg" else ("奶蛙" if actor=="frog" else "")
-	_hud["MemoryValue"].text = "←  左" if view.get("memory","left")=="left" else "右  →"
+	_hud["OrderValue"].text = "%d / 3"%delivered
+	var partner := "奶蛋" if actor=="egg" else ("奶蛙" if actor=="frog" else "伙伴")
+	_hud["ActorValue"].text = partner
+	var memory := str(view.get("memory","left"))
+	_hud["MemoryValue"].text = "向左" if memory=="left" else "向右"
 	var probe := str(view.get("probe","none"))
-	_hud["ProbeValue"].text = ("← 左" if probe=="left" else "右 →") if probe in ["left","right"] else "尚未弹盖"
+	if order!=_last_order:
+		_probed_this_order = false
+		_last_order = order
+	if probe!="none":
+		_probed_this_order = true
+	_hud["ProbeValue"].text = ("向左" if probe=="left" else "向右") if probe!="none" else ("手势已收" if _probed_this_order else "待弹盖")
+	_inspection.visible = serving and not first
+	_gauge.visible = esc or (serving and not first)
+	_optional.visible = first and serving and order>=2
+	_hud["OptionalProbe"].text = "鼠标放在奶龙一侧，点右键，看%s朝哪边伸手。"%partner
+	_hud["IdleLeverNote"].visible = first and serving
+	_hud["Controls"].text = "鼠标移动到窗台   ·   左键投瓶" if first and serving else (
+		"WASD / 方向键  移动" if out or esc else "WASD / 方向键 移动     鼠标 瞄准     右键 弹盖     左键 投瓶")
 	_hud["ClockLabel"].text = "逃生时限" if esc else "瓶内压力"
 	_hud["PressureValue"].text = "已交付" if out else ("不限时" if pressure<0 else "%d 秒"%ceili(pressure/20.0))
 	var total := ((10 if night>=7 else 12)*20) if esc else maxi(1,int(SECONDS[night-1])*20)
@@ -360,33 +433,58 @@ func update_play(view:Dictionary) -> void:
 	if esc:
 		task_heading = "紧急撤离"
 		if bool(view.get("latched",false)):
-			task = "泄压完成。立刻跑到南门的地面方框内！"
+			task = "应急杆已拉下！用 WASD 或方向键走进画面下方正中的南门绿标。"
 		else:
-			task = "跑到%s侧亮起的泄压拉杆，拉下后再去南门。"%("左" if view.get("lever")=="left" else "右")
+			task = "用 WASD 走到%s侧亮杆，靠近会自动拉下。再走到下方正中的南门。"%("左" if view.get("lever")=="left" else "右")
 	elif out:
 		task_heading = "南门打卡"
-		task = "三瓶已经签收。走入车间下方正中的南门，完成本班。"
+		task = "三瓶全部签收！按 WASD 或方向键，走进画面下方正中的南门绿标。"
+	elif first:
+		task_heading = "送第 %d 瓶"%order
+		task = "鼠标对准上方 2 号窗的窗台，点左键送第 %d 瓶。"%order
+	elif night==2:
+		var side := "右" if memory=="left" else "左"
+		if probe=="none":
+			if _probed_this_order:
+				task_heading = "手势已收"
+				task = "记住真窗就瞄窗台点左键。要再看，把鼠标放到奶龙%s边点右键。"%side
+			else:
+				task_heading = "先弹瓶盖"
+				task = "把鼠标放到奶龙%s边，点右键弹瓶盖。留意两扇窗的手。"%side
+		elif probe==memory:
+			task_heading = "换边试探"
+			task = "这次和上单方向相同。把鼠标放到奶龙%s边，点右键再弹一次。"%side
+		elif int(view.get("probeTicks",0))==0:
+			task_heading = "等伙伴伸手"
+			task = "瓶盖已弹向%s边，看两扇窗接下来的手势。"%side
+		else:
+			task_heading = "瞄准真窗"
+			task = "看谁朝%s伸手追这枚瓶盖。鼠标对准它的窗台，点左键送汽水。"%side
 	elif bool(view.get("bank",false)):
 		task_heading = "借墙交货"
 		task = "本单挡板已关闭。找到真窗后，瞄向左墙或右墙，让瓶子反弹入窗。"
-	elif night==1:
-		task_heading = "交给伙伴"
-		task = "朝左右弹盖，看伙伴伸手。鼠标瞄准开窗中央，左键投瓶。"
 	else:
 		task_heading = "辨认真窗"
 		task = "往上单相反的方向弹盖。真伙伴会追这一次的瓶盖。"
 	if view.get("bottle") != null and not esc and not out:
 		task_heading = "汽水在途"
+		if first:
+			task = "第 %d 瓶已出手，看它有没有飞进上方 2 号窗。"%order
 	_hud["PhaseValue"].text = task_heading
 	_hud["PhaseValue"].add_theme_color_override("font_color",Print.RED if esc else Print.TEAL)
 	_hud["TaskValue"].text = task
 	var event_id := int(view.get("eventId",0))
-	if event_id != _last_event_id or tick < _last_tick:
+	if event_id != _last_event_id or tick < _last_tick or delivered>_last_delivered:
 		var event := str(view.get("event",""))
 		var captions := {"deliver":"签收了。翻看下一张订单。","throw":"汽水已经出手。","bounce":"瓶子撞上侧墙。","miss":"错过窗口。调整站位，再投一瓶。","blocked":"隔板拦住了。试一次侧墙反弹。","intruder":"柜台里面还有一只。快跑！","lever":"拉杆已开，去南门！","clockout":"最后一瓶已签收。"}
 		_event_caption = str(captions.get(event,""))
-		_event_until = tick+44
+		if first and event=="miss":
+			_event_caption = "漏投。这瓶还能再投，瞄准上方 2 号窗的窗台。"
+		elif delivered>_last_delivered:
+			_event_caption = "三瓶全部签收，可以下班了。" if out else ("第 %d 瓶已签收！"%delivered)
+		_event_until = tick+64
 		_last_event_id = event_id
+	_last_delivered = delivered
 	_last_tick = tick
 	if tick<_event_until and not _event_caption.is_empty():
 		_hud["EventValue"].text = _event_caption

@@ -32,7 +32,7 @@ enum NightPhase(val wire: String):
   case Lost extends NightPhase("lost")
 
 enum NightAction:
-  case Idle, Probe, Toss
+  case Idle, Probe, Toss, Pause, Resume
 
 final case class NightPoint(x: Double, y: Double):
   def distance(other: NightPoint): Double = math.hypot(x - other.x, y - other.y)
@@ -47,6 +47,8 @@ object NightInput:
       case "none" => Some(NightAction.Idle)
       case "probe" => Some(NightAction.Probe)
       case "throw" => Some(NightAction.Toss)
+      case "pause" => Some(NightAction.Pause)
+      case "resume" => Some(NightAction.Resume)
       case _ => None
     edge.filter(_ => Vector(mx, my, ax, ay).forall(n => n.isFinite && math.abs(n) <= 1.0))
       .map(new NightInput(mx, my, ax, ay, _))

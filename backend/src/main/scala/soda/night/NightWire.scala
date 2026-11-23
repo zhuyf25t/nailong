@@ -4,7 +4,7 @@ import io.circe.Json
 import java.util.UUID
 
 object NightWire:
-  def snapshot(world: NightWorld, runId: UUID, ack: Long): Json =
+  def snapshot(world: NightWorld, runId: UUID, ack: Long, paused: Boolean = false): Json =
     val serving = world.stage match
       case stage: ShiftStage.Serving => Some(stage)
       case _ => None
@@ -25,6 +25,7 @@ object NightWire:
     }
     Json.obj(
       "runId" -> Json.fromString(runId.toString), "ack" -> Json.fromLong(ack), "tick" -> Json.fromInt(world.tick),
+      "paused" -> Json.fromBoolean(paused),
       "night" -> Json.fromInt(world.night.value), "order" -> Json.fromInt(world.order), "phase" -> Json.fromString(world.phase.wire),
       "player" -> Json.obj("x" -> Json.fromDoubleOrNull(world.player.x), "y" -> Json.fromDoubleOrNull(world.player.y)),
       "windows" -> Json.fromValues(windows), "memory" -> Json.fromString(world.memory.wire),
