@@ -3,6 +3,7 @@ extends RefCounted
 
 var move := Vector2.ZERO
 var aim := Vector2.UP
+var holding := false
 var _edges: Array[Dictionary] = []
 
 func press(action: String, direction: Vector2) -> void:
@@ -14,11 +15,12 @@ func press(action: String, direction: Vector2) -> void:
 
 func release_all() -> void:
 	move = Vector2.ZERO
+	holding = false
 	_edges.clear()
 
 func sample(seq: int) -> Dictionary:
 	var direction := aim.normalized()
-	var action := "none"
+	var action := "hold" if holding else "none"
 	if not _edges.is_empty():
 		var edge: Dictionary = _edges.pop_front()
 		direction = edge.aim

@@ -11,7 +11,6 @@ object NightLevel:
       else if level <= 4 then Vector(WindowSlot.West, WindowSlot.East)
       else WindowSlot.values.toVector
     def seconds: Option[Int] = Vector(None, Some(52), Some(47), Some(52), Some(44), Some(40), Some(38), Some(36))(level - 1)
-    def requiresBank(order: Int): Boolean = (level == 4 && order >= 2) || (level == 8 && order == 3)
     def fogDelay: Int = if level < 3 then 0 else if level == 3 || level == 8 then 12 else 8
 
 enum WindowSlot(val index: Int, val x: Double):
@@ -32,7 +31,7 @@ enum NightPhase(val wire: String):
   case Lost extends NightPhase("lost")
 
 enum NightAction:
-  case Idle, Probe, Toss, Pause, Resume
+  case Idle, Probe, Toss, Pause, Resume, Hold
 
 final case class NightPoint(x: Double, y: Double):
   def distance(other: NightPoint): Double = math.hypot(x - other.x, y - other.y)
@@ -49,6 +48,7 @@ object NightInput:
       case "throw" => Some(NightAction.Toss)
       case "pause" => Some(NightAction.Pause)
       case "resume" => Some(NightAction.Resume)
+      case "hold" => Some(NightAction.Hold)
       case _ => None
     edge.filter(_ => Vector(mx, my, ax, ay).forall(n => n.isFinite && math.abs(n) <= 1.0))
       .map(new NightInput(mx, my, ax, ay, _))
@@ -68,7 +68,7 @@ enum NightEvent(val wire: String):
   case Clockout extends NightEvent("clockout")
   case Won extends NightEvent("won")
 
-private[night] final case class Bottle(at: NightPoint, vx: Double, vy: Double, bounced: Boolean)
+private[night] final case class Bottle(at: NightPoint, vx: Double, vy: Double, bounced: Boolean, requiresBank: Boolean)
 private[night] final case class Gesture(direction: Direction, reveal: Int, expires: Int):
   def visible(tick: Int): Boolean = reveal <= tick && tick < expires
 
@@ -87,7 +87,10 @@ final case class NightWorld private[night] (
     memory: Direction,
     private[night] val stage: ShiftStage,
     event: NightEvent,
-    eventId: Long
+    eventId: Long,
+    floor: FactoryFloor,
+    puzzle: Option[PuzzleWorld],
+    firstNightTrace: Vector[NightPoint]
 ):
   def phase: NightPhase = stage match
     case _: ShiftStage.Serving => NightPhase.Serving
@@ -98,11 +101,9 @@ final case class NightWorld private[night] (
     case ShiftStage.Lost => NightPhase.Lost
 
   def order: Int = (delivered + 1).min(3)
-  def bank: Boolean = night.requiresBank(order)
-  def dim: Boolean = (night.value == 6 || night.value == 8) && tick % 140 >= 88 && tick % 140 < 122
-  def belt: Int =
-    if night.value < 7 || phase != NightPhase.Serving then 0
-    else if (tick / 96 + order) % 2 == 0 then 1 else -1
+  def bank: Boolean = FactoryFloor.lane(this) == DispatchLane.Bank
+  def dim: Boolean = puzzle.isEmpty && night.value == 6 && tick % 140 >= 88 && tick % 140 < 122
+  def belt: Int = 0
 
   // SplitMix64 finalizer gives independent, reproducible draws without a mutable RNG.
   private def draw(salt: Long, choices: Int): Int =
@@ -112,6 +113,13 @@ final case class NightWorld private[night] (
     Math.floorMod(b ^ (b >>> 31), choices.toLong).toInt
 
   private[night] def recipient: WindowSlot = night.windows(draw(1, night.windows.size))
+  private[night] def looks(slot: WindowSlot,probe: Direction): Direction =
+    if slot == recipient then probe
+    else if night.value == 5 then
+      val falseWindows = night.windows.filterNot(_ == recipient)
+      val leftIndex = draw(3,2)
+      if falseWindows(leftIndex) == slot then Direction.Left else Direction.Right
+    else memory
   def actor: String = if (order + night.value) % 2 == 0 then "frog" else "egg"
   def lever: Direction = if draw(2, 2) == 0 then Direction.Left else Direction.Right
   private[night] def emit(cue: NightEvent): NightWorld = copy(event = cue, eventId = eventId + 1)

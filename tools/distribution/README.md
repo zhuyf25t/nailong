@@ -33,3 +33,20 @@ py -3 tools/distribution/build.py --jdk C:\Tools\jdk-21 --godot C:\Tools\Godot.e
 .\Play.cmd -QuickCheck
 .\Play.cmd -QuickCheck
 ```
+
+更新已有发行包时，可从经 SHA-256 校验的上一版提取 Java、PostgreSQL 和相应许可，跳过 jlink。Godot 场景、字幕、夜班素材、八夜测试驱动、Scala 服务及依赖均重新打包。将候选包生成为单独的文件，在独立存档和端口启动。
+
+```powershell
+py -3 tools/distribution/build.py --runtime-from ..\output\night-shift\Only-Three-on-Shift-Windows-x64.zip --output ..\tmp\night-release-candidate
+# 将候选 ZIP 完整解压，在含 Play.cmd 的目录运行
+.\Play.cmd -QuickCheck -HttpPort 18741 -DatabasePort 55443
+.\Play.cmd -SmokeTest -HttpPort 18741 -DatabasePort 55443
+```
+
+`-QuickCheck` 会从实际 PCK 打开素材清单里的每张图、每段声音以及游戏脚本，再核对首夜字幕。`-SmokeTest` 使用游戏的输入、窗口与服务器进行完整八夜回归。
+
+维护者可以用同一个脚本解压候选包、运行首夜检查、通关八夜、重启读取存档。验收存档与逐轮日志放在工作区独立的 `tmp/night-release-proof-*` 目录。以下命令在三次运行均通过后才更新本地发行 ZIP 和校验文件。
+
+```powershell
+py -3 tools/distribution/verify_candidate.py ..\tmp\night-release-candidate\Only-Three-on-Shift-Windows-x64.zip --publish-to ..\output\night-shift
+```

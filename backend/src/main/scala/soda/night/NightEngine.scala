@@ -11,25 +11,40 @@ object NightEngine:
   private def freshOrder(night: NightLevel): ShiftStage.Serving =
     ShiftStage.Serving(night.seconds.map(_ * 20), None, None, None, pristine = true)
 
-  def start(level: NightLevel, seed: Long): NightWorld =
-    NightWorld(level, seed, 0, 0, 0, NightPoint(240, 220), Direction.Left, freshOrder(level), NightEvent.Start, 0)
+  def start(level: NightLevel, seed: Long,trace: Vector[NightPoint] = Vector.empty): NightWorld =
+    val origin = NightPoint(240,220)
+    val w = NightWorld(level, seed, 0, 0, 0, origin, Direction.Left, freshOrder(level), NightEvent.Start, 0,
+      FactoryFloor.initial(level),None,if level.value == 1 then Vector(origin) else trace)
+    w.copy(puzzle = StoryPuzzles.start(w))
 
   private def move(world: NightWorld, sample: NightInput): NightPoint =
     val scale = 4.0 / math.hypot(sample.mx, sample.my).max(1.0)
-    val drift = if world.player.y >= 166 && world.player.y <= 202 then world.belt * 1.35 else 0.0
-    NightPoint(
-      (world.player.x + scale * sample.mx + drift).max(16).min(464),
+    val candidate = NightPoint(
+      (world.player.x + scale * sample.mx).max(16).min(464),
       (world.player.y + scale * sample.my).max(98).min(267)
     )
+    world.puzzle.fold(candidate)(StoryPuzzles.constrain(world,_,candidate))
 
   def step(world: NightWorld, sample: NightInput): NightWorld = world.stage match
     case ShiftStage.Won | ShiftStage.Escaped | ShiftStage.Lost => world
     case stage =>
-      val current = world.copy(tick = world.tick + 1, player = move(world, sample))
-      stage match
-        case order: ShiftStage.Serving => serve(current, order, sample)
-        case chase: ShiftStage.Escaping => escape(current, chase)
-        case ShiftStage.Clockout if current.player.distance(exit) <= 23 =>
+      val position = move(world,sample)
+      // Five samples per second, including pauses and turns, preserve the original pacing.
+      // Keep the last two minutes of the completed shift if the player lingers indefinitely.
+      val record = world.night.value == 1 && (world.tick + 1) % 4 == 0
+      val current = world.copy(tick = world.tick + 1, player = position,
+        firstNightTrace = if record then (world.firstNightTrace :+ position).takeRight(600) else world.firstNightTrace)
+      (stage,current.puzzle) match
+        case (_: ShiftStage.Serving,Some(puzzle)) =>
+          StoryPuzzles.step(current,puzzle,sample) match
+            case PuzzleTransition.Continue(next,where) => current.copy(puzzle=Some(next),player=where.getOrElse(position))
+            case PuzzleTransition.Finish(next) =>
+              current.copy(stage=ShiftStage.Won,puzzle=Some(next)).emit(NightEvent.Won)
+        case (order: ShiftStage.Serving,_) =>
+          val (floor, fell) = FactoryFloor.advance(current)
+          if fell then floor else serve(floor,order,sample)
+        case (chase: ShiftStage.Escaping,_) => escape(current, chase)
+        case (ShiftStage.Clockout,_) if current.player.distance(exit) <= 23 =>
           current.copy(stage = ShiftStage.Won).emit(NightEvent.Won)
         case _ => current
 
@@ -41,11 +56,14 @@ object NightEngine:
         val reveal = world.tick + world.night.fogDelay
         (world.emit(NightEvent.Probe), order.copy(lastProbe = Some(direction),
           gesture = Some(Gesture(direction, reveal, reveal + 40))))
+      case NightAction.Toss if order.bottle.isEmpty &&
+          (FactoryFloor.lane(world) == DispatchLane.Loading || FactoryFloor.lane(world) == DispatchLane.Outside) =>
+        (world.copy(floor = world.floor.announce(FactoryCue.RouteBlocked,world.tick)).emit(NightEvent.Blocked),order)
       case NightAction.Toss if order.bottle.isEmpty =>
         val length = math.hypot(sample.ax, sample.ay)
         val (vx, vy) = if length < 1.0e-8 then (0.0, -bottleSpeed)
           else (sample.ax / length * bottleSpeed, sample.ay / length * bottleSpeed)
-        (world.emit(NightEvent.Throw), order.copy(bottle = Some(Bottle(world.player, vx, vy, bounced = false))))
+        (world.emit(NightEvent.Throw), order.copy(bottle = Some(Bottle(world.player, vx, vy, bounced = false, world.bank))))
       case _ => (world, order)
     val settled = active.bottle.fold(cued.copy(stage = active))(fly(cued, active, _, 1.0))
     settled.stage match
@@ -67,7 +85,7 @@ object NightEngine:
       else if shot.vy > 0 then (floorEnd - at.y) / shot.vy else Double.PositiveInfinity
     if end <= side && end <= duration then
       if shot.vy > 0 then failedShot(world, order, NightEvent.Miss)
-      else receive(world, order, point(end).x, shot.bounced)
+      else receive(world, order, point(end).x, shot.bounced,shot.requiresBank)
     else if side <= duration then
       if shot.bounced then failedShot(world, order, NightEvent.Miss)
       else
@@ -79,16 +97,21 @@ object NightEngine:
   private def failedShot(world: NightWorld, order: ShiftStage.Serving, event: NightEvent): NightWorld =
     world.copy(stage = order.copy(bottle = None, pristine = false)).emit(event)
 
-  private def receive(world: NightWorld, order: ShiftStage.Serving, x: Double, bounced: Boolean): NightWorld =
+  private def receive(world: NightWorld, order: ShiftStage.Serving, x: Double, bounced: Boolean, bankRequired: Boolean): NightWorld =
     world.night.windows.find(slot => math.abs(slot.x - x) <= 35.0) match
       case None => failedShot(world, order, NightEvent.Miss)
-      case Some(_) if world.bank && !bounced => failedShot(world, order, NightEvent.Blocked)
+      case Some(_) if bankRequired && !bounced => failedShot(world, order, NightEvent.Blocked)
       case Some(slot) if slot != world.recipient => intruder(world)
       case Some(_) =>
         val count = world.delivered + 1
+        val floor = if world.night.value == 2 && count == 1 then world.floor.announce(FactoryCue.DoubleThanks,world.tick)
+          else world.floor
         val next = world.copy(delivered = count, clean = world.clean + (if order.pristine then 1 else 0),
-          memory = order.lastProbe.getOrElse(world.memory))
-        if count == 3 then next.copy(stage = ShiftStage.Clockout).emit(NightEvent.Clockout)
+          memory = order.lastProbe.getOrElse(world.memory),floor = floor)
+        if world.night.value == 6 && count == 2 then
+          val ready = next.copy(stage = freshOrder(world.night)).emit(NightEvent.Deliver)
+          ready.copy(puzzle = StoryPuzzles.start(ready))
+        else if count == 3 then next.copy(stage = ShiftStage.Clockout).emit(NightEvent.Clockout)
         else next.copy(stage = freshOrder(world.night)).emit(NightEvent.Deliver)
 
   private def intruder(world: NightWorld): NightWorld =

@@ -22,7 +22,7 @@ private[night] final case class Shift(id: RunId, world: NightWorld, ack: Long, h
           if target == paused then Right(accepted)
           else Right(accepted.copy(paused = target, held = NightInput.idle, actions = Queue.empty, inputAt = pulse))
         case _ if paused => Right(accepted)
-        case NightAction.Idle => Right(accepted.copy(held = input, inputAt = pulse))
+        case NightAction.Idle | NightAction.Hold => Right(accepted.copy(held = input, inputAt = pulse))
         case _ if actions.size >= 16 => Left(NightProblem.Busy)
         case _ => Right(accepted.copy(held = input.withoutAction, actions = actions.enqueue(input), inputAt = pulse))
 
@@ -40,7 +40,7 @@ private final case class Shifts(active: Map[PlayerId,Shift], pending: Map[RunId,
       .mapValues(_.advance(nextPulse)).toMap
     val finished = next.collect { case (player,shift)
       if shift.world.phase == NightPhase.Won && active(player).world.phase != NightPhase.Won =>
-        shift.id -> Clear(player, shift.world.night, shift.world.clean)
+        shift.id -> Clear(player, shift.world.night, shift.world.clean,shift.world.firstNightTrace)
     }
     Shifts(next, pending ++ finished, nextPulse)
 
@@ -66,12 +66,12 @@ final class NightShifts private (journal: NightJournal, ref: Ref[IO,Shifts], sta
         receipt <- journal.reserve(player, req, level, id)
         result <- receipt match
           case Left(problem) => IO.pure(Left(problem))
-          case Right(Receipt(existing,false)) =>
+          case Right(Receipt(existing,false,_)) =>
             ref.get.map(_.active.get(player).filter(_.id == existing).toRight(NightProblem.Replaced))
-          case Right(Receipt(fresh,true)) =>
+          case Right(Receipt(fresh,true,trace)) =>
             IO(ThreadLocalRandom.current().nextLong()).flatMap { seed =>
               ref.modify { state =>
-                val shift = Shift(fresh, NightEngine.start(level, seed), -1, NightInput.idle, Queue.empty,
+                val shift = Shift(fresh, NightEngine.start(level, seed,trace), -1, NightInput.idle, Queue.empty,
                   state.pulse, state.pulse)
                 (state.copy(active = state.active.updated(player, shift)), Right(shift))
               }

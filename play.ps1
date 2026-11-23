@@ -11,8 +11,6 @@ $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'game'
 $runtime = Join-Path $PSScriptRoot '.night-runtime'
 $serverScript = Join-Path $PSScriptRoot 'backend/start.ps1'
-$stopFile = Join-Path $runtime 'server.stop'
-$serverPidFile = Join-Path $runtime 'launcher.pid'
 if (-not $Godot) { $Godot = 'D:\HW3Tools\Godot-4.7.2\Godot_v4.7.2-stable_win64.exe' }
 if (-not $ServerOnly -and -not (Test-Path -LiteralPath $Godot -PathType Leaf)) { throw "Godot executable missing: $Godot" }
 $console = Join-Path (Split-Path -Parent $Godot) (([IO.Path]::GetFileNameWithoutExtension($Godot)) + '_console.exe')
@@ -26,11 +24,13 @@ if ($ConnectTo) {
     $baseUrl = $ConnectTo.AbsoluteUri.TrimEnd('/')
 }
 
-function Test-SodaHealth {
+function Read-NightHealth([string]$address) {
     try {
-        $health = Invoke-RestMethod "$baseUrl/health" -TimeoutSec 2
-        return $health.status -eq 'ok' -and $health.game -eq 'nightshift'
-    } catch { return $false }
+        return Invoke-RestMethod "$address/health" -TimeoutSec 2
+    } catch { return $null }
+}
+function Test-CampaignServer($health) {
+    return ($health.status -eq 'ok' -and $health.game -eq 'nightshift' -and $health.storyCampaign -eq 2)
 }
 
 # Serialize startup and import when multiple windows use the same service.
@@ -40,18 +40,33 @@ try {
     try { $locked = $gate.WaitOne([TimeSpan]::FromSeconds($StartupTimeoutSeconds)) }
     catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { throw 'Another launch is still starting the game.' }
-    if (-not (Test-SodaHealth)) {
-        if ($ConnectTo) { throw "The Night Shift server at $baseUrl is unavailable." }
+    $serverRuntime = $runtime
+    $health = Read-NightHealth $baseUrl
+    if (-not $ConnectTo -and -not (Test-CampaignServer $health)) {
+        $otherUrl = 'http://127.0.0.1:8740'
+        $otherRuntime = Join-Path $runtime 'story-server'
+        $other = if (Test-Path -LiteralPath $otherRuntime) { Read-NightHealth $otherUrl }
+        if ((Test-CampaignServer $other) -or $health.game -eq 'nightshift') {
+            # An older window can finish its shift while the new game shares its saved progress.
+            $baseUrl = $otherUrl
+            $health = $other
+            $serverRuntime = (New-Item -ItemType Directory -Path $otherRuntime -Force).FullName
+        }
+    }
+    if (-not (Test-CampaignServer $health)) {
+        if ($ConnectTo) { throw "This endpoint must run Night Shift story campaign v2: $baseUrl" }
+        $stopFile = Join-Path $serverRuntime 'server.stop'
+        $serverPidFile = Join-Path $serverRuntime 'launcher.pid'
         if (Test-Path -LiteralPath $stopFile) { Remove-Item -LiteralPath $stopFile }
-        $stdout = Join-Path $runtime 'server.log'
-        $stderr = Join-Path $runtime 'server-errors.log'
+        $stdout = Join-Path $serverRuntime 'server.log'
+        $stderr = Join-Path $serverRuntime 'server-errors.log'
         $previousSignal = $env:SODA_STOP_FILE
         $previousHost = $env:SODA_BIND_HOST
         $previousPort = $env:SODA_HTTP_PORT
         try {
             $env:SODA_STOP_FILE = $stopFile
             $env:SODA_BIND_HOST = '127.0.0.1'
-            $env:SODA_HTTP_PORT = '8738'
+            $env:SODA_HTTP_PORT = ([uri]$baseUrl).Port.ToString()
             $shell = (Get-Command powershell.exe).Source
             $serverArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $serverScript + '"'
             $server = Start-Process $shell -ArgumentList $serverArgs -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
@@ -63,7 +78,7 @@ try {
         }
         Write-Host "Starting Night Shift. Server log: $stdout"
         $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
-        while (-not (Test-SodaHealth)) {
+        while (-not (Test-CampaignServer (Read-NightHealth $baseUrl))) {
             if ($server.HasExited -or [DateTime]::UtcNow -ge $deadline) {
                 throw "Game server failed to start. See $stdout and $stderr"
             }
@@ -91,10 +106,15 @@ if ($SmokeTest) {
     $gameArgs += ' --headless --script res://tests/night_playthrough.gd --log-file "' + $smokeLog + '"'
 }
 $previousUrl = $env:SODA_API_URL
+$previousLocal = $env:NIGHT_LOCAL_ALTERNATE
 try {
     $env:SODA_API_URL = $baseUrl
+    $env:NIGHT_LOCAL_ALTERNATE = if (-not $ConnectTo -and $baseUrl -eq 'http://127.0.0.1:8740') { '1' } else { '0' }
     $process = Start-Process $Godot -ArgumentList $gameArgs -WorkingDirectory $project -PassThru -Wait
-} finally { $env:SODA_API_URL = $previousUrl }
+} finally {
+    $env:SODA_API_URL = $previousUrl
+    $env:NIGHT_LOCAL_ALTERNATE = $previousLocal
+}
 if ($process.ExitCode -ne 0) { throw "Godot exited with code $($process.ExitCode)" }
 if ($SmokeTest -and -not (Select-String -LiteralPath $smokeLog -Pattern 'Night shift playthrough PASS' -SimpleMatch -Quiet)) {
     throw "The playthrough did not complete. See $smokeLog"

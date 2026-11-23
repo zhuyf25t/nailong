@@ -34,6 +34,20 @@ func _initialize() -> void:
 	_expect(Wire.snapshot(bad).is_empty(), "escape has a pursuer")
 	bad.chase = {"x":100,"y":90}
 	_expect(not Wire.snapshot(bad).is_empty(), "server pursuer position")
+	var story := {"step":"observe_windows","room":"maintenance","objective":"看哪扇窗慢了两秒。","cue":"hatch",
+		"stageTick":40,"cueId":1,"round":0,"sleepTicks":0,"sleepMax":0,"braceTicks":0,"braceMax":0,
+		"tiles":[{"x":216,"y":190,"state":"warn","ticks":20}],
+		"people":[{"kind":"monitor","slot":1,"x":240.0,"y":76.0}],"marks":[{"kind":"window","x":240,"y":117}]}
+	var observed := view.duplicate(true)
+	observed.story = story
+	_expect(not Wire.snapshot(observed).is_empty(), "visible campaign story accepted")
+	for pair: Array in [["room",2],["stageTick",-1],["cueId",0.5],["objective","x".repeat(241)],
+			["round",4],["sleepTicks",1],["braceTicks",1],["sleepMax",-1],["braceMax","14"],
+			["marks",[{"kind":"gate","x":481,"y":20}]],["people",[{"kind":"monitor","slot":9,"x":240,"y":88}]],
+			["tiles",[{"x":216,"y":190,"state":"instant_win","ticks":0}]],["tiles",[{"x":216,"y":190,"state":"hole","ticks":-1}]]]:
+		bad = observed.duplicate(true)
+		bad.story[pair[0]] = pair[1]
+		_expect(Wire.snapshot(bad).is_empty(), "invalid story " + str(pair[0]))
 	_expect(Wire.profile({"unlocked":4,"cleared":[1,2,3],"bestClean":3}).unlocked == 4, "progress")
 	_expect(Wire.profile({"unlocked":4,"cleared":[1,3],"bestClean":3}).is_empty(), "missing completed night")
 	var controls := Sample.new()
@@ -44,6 +58,14 @@ func _initialize() -> void:
 	var second := controls.sample(1)
 	_expect(first.action == "probe" and first.ax < 0 and second.action == "throw" and second.ay < 0, "rapid clicks retain order and aim")
 	_expect(controls.sample(2).action == "none", "edge consumed once")
+	controls.move = Vector2.RIGHT
+	controls.press("probe", Vector2.UP)
+	controls.holding = true
+	_expect(controls.sample(3).action == "probe" and controls.sample(4).action == "hold" and controls.sample(5).action == "hold", "held mouse repeats on simulation input frames")
+	controls.press("throw", Vector2.LEFT)
+	controls.release_all()
+	var blurred := controls.sample(6)
+	_expect(blurred.action == "none" and blurred.mx == 0 and blurred.my == 0, "focus loss releases movement and pending gesture")
 	print("Night typed client contract ", "PASS" if errors == 0 else "FAIL")
 	quit(errors)
 

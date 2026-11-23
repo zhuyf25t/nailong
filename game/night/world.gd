@@ -1,5 +1,5 @@
 class_name NightWorldView
-extends "res://night/world_ink.gd"
+extends "res://night/story_world.gd"
 
 const STEP_SEC := 0.05
 const PLAYER_START := Vector2(240, 220)
@@ -42,6 +42,15 @@ var _echo_at := -100.0
 var _echo_mark := -1
 var _echo_side := -1
 var _echo_in_clock := false
+var _people_from: Dictionary = {}
+var _people_to: Dictionary = {}
+var _window_tracks: Dictionary = {}
+var _window_keys: Dictionary = {}
+var _cue_at := 0.0
+var _frog_answer := Vector2.ZERO
+var _feed_at := -10.0
+var _feed_from := Vector2.ZERO
+var _feed_to := Vector2.ZERO
 
 func _ready() -> void:
 	_sign_font.font_names = PackedStringArray(["Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
@@ -50,6 +59,7 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	clip_contents = true
 	load_world_art()
+	load_story_art()
 
 func _zoom() -> float:
 	return maxf(0.001, minf(size.x / WORLD.x, size.y / WORLD.y))
@@ -70,6 +80,9 @@ func set_aim(world_point: Vector2) -> void:
 # is an instruction to aim at their sill, including from an oblique position.
 func delivery_target(cursor: Vector2) -> Vector2:
 	if view.is_empty() or view["phase"] != "serving":
+		return cursor
+	var story: Dictionary = view.get("story", {})
+	if story.get("room", "factory") != "factory" or story.get("step", "") == "supply":
 		return cursor
 	if int(view["night"]) == 1 and TRAINING_TAG.has_point(cursor):
 		return Vector2(240, RECEIVE_Y)
@@ -96,15 +109,32 @@ func set_view(state: Dictionary) -> void:
 	var next_id := str(state["runId"])
 	var next_tick := int(state["tick"])
 	var fresh := _run_id != next_id or _last_tick < 0
+	var story: Dictionary = state.get("story", {})
+	var previous_story: Dictionary = view.get("story", {})
 	if not fresh and next_tick < _last_tick:
 		return
-	if not fresh and next_tick == _last_tick and int(state["eventId"]) == _last_event:
+	if not fresh and next_tick == _last_tick and int(state["eventId"]) == _last_event and story.get("cueId") == previous_story.get("cueId") and story.get("step") == previous_story.get("step"):
 		return
+	if fresh or previous_story.get("cueId") != story.get("cueId"):
+		_cue_at = _clock
+		if story.get("room") == "sleepward":
+			for person: Dictionary in story.get("people", []):
+				if person.kind == "wake_look":
+					_frog_answer = _point(person)
+					_cap_at = _clock
+					_cap_from = _target
+					_cap_to = _frog_answer
+			if story.get("cue") in ["round_clear", "ward_face"] and _frog_answer != Vector2.ZERO:
+				_feed_from = _target
+				_feed_to = _frog_answer
+				_feed_at = _clock
+				_frog_answer = Vector2.ZERO
 	var next_pos := _point(state["player"])
 	var elapsed_steps := next_tick - _last_tick
-	_from = next_pos if fresh else _shown_player()
+	var warp: bool = fresh or story.get("room") != previous_story.get("room") or _target.distance_to(next_pos) > 30
+	_from = next_pos if warp else _shown_player()
 	var travel := next_pos - _target
-	_moving = not fresh and travel.length_squared() > 0.2
+	_moving = not warp and travel.length_squared() > 0.2
 	if _moving:
 		if absf(travel.x) > absf(travel.y):
 			_facing = 1 if travel.x > 0 else 3
@@ -137,6 +167,7 @@ func set_view(state: Dictionary) -> void:
 	var previous_phase := str(view.get("phase", ""))
 	var previous_event := str(view.get("event", ""))
 	var previous_order := int(view.get("order", 0))
+	_update_story_actors(story, fresh or previous_story.get("step") != story.get("step"))
 	_snapshot_at = _clock
 	_step_seconds = clampf(elapsed_steps * STEP_SEC, STEP_SEC, 0.14)
 	_last_tick = next_tick
@@ -150,6 +181,8 @@ func set_view(state: Dictionary) -> void:
 		_flash_at = -10.0
 		_echo_at = -100.0
 		_echo_mark = -1
+		_feed_at = -10.0
+		_frog_answer = Vector2.ZERO
 	if int(view["eventId"]) != _last_event:
 		_last_event = int(view["eventId"])
 		_on_event(str(view["event"]))
@@ -166,6 +199,8 @@ func _on_event(kind: String) -> void:
 			var left: bool = view["probe"] == "left"
 			_cap_from = _target
 			_cap_to = Vector2(51 if left else 429, RECEIVE_Y + 3)
+			if view.get("story", {}).get("room", "factory") != "factory":
+				_cap_to = _aim.clamp(Vector2.ZERO, WORLD)
 			_cap_at = _clock
 			if not _moving:
 				_facing = 3 if left else 1
@@ -209,6 +244,10 @@ func _draw() -> void:
 	var phase := str(view.get("phase", "serving"))
 	var escaping := phase in ["escaping", "lost", "escaped"]
 	var dark := bool(view.get("dim", false)) or phase == "lost"
+	var story: Dictionary = view.get("story", {})
+	if story.get("room", "factory") != "factory":
+		_draw_puzzle(story, phase)
+		return
 	base_room(dark, escaping)
 	if view.is_empty():
 		for center: int in SLOTS:
@@ -218,6 +257,8 @@ func _draw() -> void:
 	if phase == "serving":
 		_draw_echo()
 	conveyor(int(view["belt"]), _clock)
+	story_tiles(story, _clock)
+	story_props(story, _clock)
 	_draw_rail_lights()
 	hardware(str(view["lever"]), bool(view["latched"]), phase == "escaping", phase in ["clockout", "won"], _clock)
 	var p := _shown_player()
@@ -240,6 +281,115 @@ func _draw() -> void:
 			line_px(cross + delta * 3, cross + delta * 5, WARM)
 	if phase == "escaping":
 		latch_closeup(_clock - _intrusion_at, str(view["lever"]))
+
+func _update_story_actors(s: Dictionary, stage_change: bool) -> void:
+	var starts: Dictionary = {}
+	var ends: Dictionary = {}
+	if stage_change:
+		_window_tracks.clear()
+	_window_keys = _match_windows(s.get("people", []), stage_change)
+	for person: Dictionary in s.get("people", []):
+		var key := _resolved_key(person)
+		var p := _point(person)
+		var last: Vector2 = _people_to.get(key, p)
+		var start: Vector2 = _people_from.get(key, last)
+		starts[key] = p if (stage_change or last.distance_to(p) > 65) else start.lerp(last, _blend())
+		ends[key] = p
+		if is_rotating_window(String(person.kind)):
+			var samples: PackedVector2Array = _window_tracks.get(key, PackedVector2Array())
+			samples.append(p)
+			if samples.size() > 14:
+				samples.remove_at(0)
+			_window_tracks[key] = samples
+	_people_from = starts
+	_people_to = ends
+
+func _resolved_key(person: Dictionary) -> String:
+	if is_rotating_window(String(person.kind)):
+		return _window_keys.get(int(person.slot), story_actor_key(person))
+	return story_actor_key(person)
+
+func _match_windows(people: Array, reset: bool) -> Dictionary:
+	var panes: Array[Dictionary] = []
+	for person: Dictionary in people:
+		if is_rotating_window(String(person.kind)):
+			panes.append(person)
+	var assigned := {}
+	if panes.size() != 4:
+		return assigned
+	var predicted: Array[Vector2] = []
+	for i in range(4):
+		var key := "ring/%d" % i
+		assigned[int(panes[i].slot)] = key
+		if _people_to.has(key):
+			var last: Vector2 = _people_to[key]
+			var points: PackedVector2Array = _window_tracks.get(key, PackedVector2Array())
+			var velocity := Vector2.ZERO
+			if points.size() >= 2:
+				velocity = (points[-1] - points[-2]).limit_length(14)
+			predicted.append(last + velocity)
+	if reset or predicted.size() != 4:
+		return assigned
+	# Slots follow screen order and can be renumbered during a pass. Match all four
+	# carriages as a group, keeping their visible momentum through close approaches.
+	var best_cost := INF
+	var best_order := PackedInt32Array([0,1,2,3])
+	for a in range(4):
+		for b in range(4):
+			if a == b:
+				continue
+			for c in range(4):
+				if c == a or c == b:
+					continue
+				var order := PackedInt32Array([a,b,c,6-a-b-c])
+				var cost := 0.0
+				for i in range(4):
+					cost += predicted[order[i]].distance_squared_to(_point(panes[i]))
+				if cost < best_cost:
+					best_cost = cost
+					best_order = order
+	for i in range(4):
+		assigned[int(panes[i].slot)] = "ring/%d" % best_order[i]
+	return assigned
+
+func _draw_puzzle(s: Dictionary, phase: String) -> void:
+	var p := _shown_player()
+	story_back(s, _clock, _aim)
+	story_tiles(s, _clock)
+	if s.get("room", "") == "sleepward":
+		story_ring(s, _aim, _window_tracks)
+	story_props(s, _clock)
+	var frame := 1 + posmod(floori(_clock * 9), 2) if _moving else 0
+	var people: Array = s.get("people", []).duplicate()
+	people.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.y < b.y)
+	var player_drawn := false
+	for person: Dictionary in people:
+		var key := _resolved_key(person)
+		var goal: Vector2 = _people_to[key]
+		var start: Vector2 = _people_from[key]
+		var at := start.lerp(goal, _blend())
+		if at.y > p.y and not player_drawn:
+			story_player(p, _facing, frame, s)
+			player_drawn = true
+		story_person(person, s, start, at, _clock)
+	if not player_drawn:
+		story_player(p, _facing, frame, s)
+	if s.get("room", "") == "sleepward":
+		ward_operating_lamp(s)
+		var feed_time := (_clock - _feed_at) / 0.38
+		if feed_time >= 0 and feed_time < 1:
+			var flight := _feed_from.lerp(_feed_to, feed_time) - Vector2(0, sin(feed_time * PI) * 13)
+			draw_bottle(flight, _feed_to - _feed_from, false)
+		elif feed_time < 1.6:
+			impact(_feed_to, (feed_time - 1) / 0.6, PAPER)
+	_draw_flying_bottle()
+	if s.get("step") not in ["sleep_watch", "sleep_reveal"]:
+		_draw_probe()
+	if phase == "serving" and Rect2(Vector2.ZERO, WORLD).has_point(_aim):
+		var axis := (_aim - p).normalized()
+		dots(p + axis * 14, p + axis * 23, Color(PAPER, 0.6), 4)
+		_brackets(_aim.round(), 4, 4, Color(PAPER, 0.8))
+	story_front(s, _clock - _cue_at)
 
 func _update_echo() -> void:
 	var order := int(view["order"])

@@ -26,3 +26,25 @@ prepareLaunch := {
   IO.write(out, classpath, java.nio.charset.StandardCharsets.UTF_8)
   out
 }
+
+lazy val prepareServer = taskKey[File]("Freeze the compiled application for a running local server")
+prepareServer := {
+  val jar = (Compile / packageBin).value
+  val dependencies = (Runtime / dependencyClasspath).value.map(_.data.getAbsolutePath)
+  val bytes = java.nio.file.Files.readAllBytes(jar.toPath)
+  val hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).map(b => f"${b & 0xff}%02x").mkString
+  val directory = baseDirectory.value / ".night-runtime" / "versions"
+  IO.createDirectory(directory)
+  val frozen = directory / (hash + ".jar")
+  if (!frozen.exists()) {
+    val staged = java.nio.file.Files.createTempFile(directory.toPath, "night-", ".tmp")
+    try {
+      java.nio.file.Files.write(staged, bytes)
+      try java.nio.file.Files.move(staged, frozen.toPath, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+      catch { case _: java.nio.file.FileAlreadyExistsException => () }
+    } finally java.nio.file.Files.deleteIfExists(staged)
+  }
+  val out = target.value / "runtime-server-classpath.txt"
+  IO.write(out, (frozen.getAbsolutePath +: dependencies).mkString(java.io.File.pathSeparator), java.nio.charset.StandardCharsets.UTF_8)
+  out
+}

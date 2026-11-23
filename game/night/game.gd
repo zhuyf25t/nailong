@@ -49,7 +49,7 @@ func _ready() -> void:
 	get_tree().auto_accept_quit = false
 	get_window().close_requested.connect(_close)
 	_install_movement()
-	_guest_path = "user://night-guest-%s.cfg" % api.base_url.sha256_text().left(12)
+	_guest_path = "user://night-guest-%s.cfg" % _profile_origin().sha256_text().left(12)
 	if FileAccess.file_exists(_guest_path):
 		_guest_saved = _guest.load(_guest_path) == OK
 	if FileAccess.file_exists(OPTIONS_PATH):
@@ -151,7 +151,12 @@ func _start(night: int) -> void:
 	api.start(night)
 
 func _reader_key() -> String:
-	return (api.base_url + "|" + api.nickname).sha256_text()
+	return (_profile_origin() + "|" + api.nickname).sha256_text()
+
+func _profile_origin() -> String:
+	if api.base_url == "http://127.0.0.1:8740" and OS.get_environment("NIGHT_LOCAL_ALTERNATE") == "1":
+		return "http://127.0.0.1:8738"
+	return api.base_url
 
 func _open_rules() -> void:
 	if ui.rules_open():
@@ -238,12 +243,24 @@ func _input(event: InputEvent) -> void:
 		_cursor = event.position
 	elif event is InputEventMouseButton:
 		_cursor = event.position
+		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			api.controls.holding = false
 		if not event.pressed or api.current.phase != "serving":
 			return
 		var at := world.screen_to_world(_cursor)
 		if not FACTORY_BOUNDS.has_point(at):
 			return
+		var story: Dictionary = api.current.get("story", {})
+		if story.get("step") == "sleep_watch" and event.button_index == MOUSE_BUTTON_LEFT:
+			api.controls.holding = true
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			api.controls.press("throw", _direction(world.delivery_target(at)))
+			var target: Vector2 = world.delivery_target(at) if story.get("room", "factory") == "factory" else at
+			var aim := _direction(target)
+			# Standing on a marker is a valid click even when the cursor is at our feet.
+			api.controls.press("throw", Vector2.UP if aim.is_zero_approx() else aim)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			api.controls.press("probe", _direction(at))
+			var aim := _direction(at)
+			if aim.is_zero_approx() and story.get("room", "factory") != "factory":
+				aim = Vector2.UP
+			api.controls.press("probe", aim)

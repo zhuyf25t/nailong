@@ -64,6 +64,24 @@ func _activate(client: Node, name_of_button: String) -> bool:
 	return true
 
 
+func _check_pack() -> bool:
+	var inventory: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://night-package-files.json"))
+	if not inventory is Array or inventory.is_empty():
+		_fail("missing exported file inventory")
+		return false
+	for item: Variant in inventory:
+		var path := str(item)
+		if ResourceLoader.exists(path):
+			if ResourceLoader.load(path) != null:
+				continue
+		elif path.get_extension().to_lower() in ["json", "csv", "txt", "srt"] and FileAccess.file_exists(path):
+			continue
+		_fail("could not open packaged game resource: " + path)
+		return false
+	print("Opened ", inventory.size(), " packaged client assets, scenes and scripts.")
+	return true
+
+
 func _check_rules_and_training(client: Node, account: String, password: String) -> bool:
 	var api: Node = client.get("api")
 	api.call("login", account, password)
@@ -96,6 +114,14 @@ func _check_rules_and_training(client: Node, account: String, password: String) 
 	var inspection := ui.find_child("InspectionRecord", true, false) as CanvasItem
 	var pressure := ui.find_child("PressureGauge", true, false) as CanvasItem
 	var lever_note := ui.find_child("IdleLeverNote", true, false) as Label
+	var speaker := ui.find_child("SubtitleSpeaker", true, false) as Label
+	var subtitle := ui.find_child("SubtitleText", true, false) as Label
+	var story: Dictionary = (api.get("current") as Dictionary).get("story", {})
+	if story.get("room") != "factory" or story.get("cue") != "warm" \
+		or speaker == null or not speaker.is_visible_in_tree() or "奶蛙" not in speaker.text \
+		or subtitle == null or not subtitle.is_visible_in_tree() or "点左键" not in subtitle.text:
+		_fail("the opening server cue or the default Chinese subtitles are missing")
+		return false
 	var valid := instruction != null and instruction.is_visible_in_tree() and "2 号窗" in instruction.text \
 		and "左键" in instruction.text and objective != null and objective.text == "送第 1 瓶" \
 		and counter != null and counter.text == "0 / 3" and inspection != null \
@@ -137,8 +163,7 @@ func _run() -> void:
 	if scene == null:
 		_fail("missing main scene")
 		return
-	if load("res://assets/night/title.png") == null:
-		_fail("title art not packaged")
+	if not _check_pack():
 		return
 	var client := scene.instantiate()
 	root.add_child(client)
@@ -197,5 +222,5 @@ func _run() -> void:
 	if 1 not in profile.get("cleared", []) or int(profile.get("unlocked", 0)) < 2:
 		_fail("the result was not saved: %s" % str(profile))
 		return
-	print("Distribution check PASS: mandatory rules, four pages, server pause/resume, first-shift instructions, three real deliveries, saved unlock.")
+	print("Distribution check PASS: package resources, mandatory rules, four pages, Chinese subtitles, server pause/resume, first-shift instructions, three real deliveries, saved unlock.")
 	quit(0)

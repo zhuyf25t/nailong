@@ -23,8 +23,16 @@ final class NightEngineSuite extends FunSuite:
     val probe = packet(ax = if direction == "left" then -1 else 1, edge = "probe")
     val showing = advance(NightEngine.step(w, probe), 12)
     val responding = windows(showing).collect { case (slot, look) if look == direction => slot }
-    assertEquals(responding.size, 1)
-    (showing, responding.head)
+    if w.night.value == 5 then
+      val opposite = if direction == "left" then "right" else "left"
+      val second = advance(NightEngine.step(showing,packet(ax = -probe.ax,edge="probe")),12)
+      val both = responding.intersect(windows(second).collect { case (slot,look) if look == opposite => slot })
+      assertEquals(responding.size,2)
+      assertEquals(both.size,1)
+      (second,both.head)
+    else
+      assertEquals(responding.size, 1)
+      (showing, responding.head)
 
   private def fire(w: NightWorld, x: Double, y: Double): Vector[NightWorld] =
     val dx = x - w.player.x
@@ -64,7 +72,7 @@ final class NightEngineSuite extends FunSuite:
   }
 
   test("probes follow current versus last order, including fog delay, expiry and repeated direction") {
-    val w = make(3)
+    val w = walk(make(3),NightPoint(240,154),2)
     val initial = windows(w)
     assertEquals(initial, Vector(0 -> "still", 2 -> "still"))
     val matchMemory = advance(NightEngine.step(w, packet(ax = -1, edge = "probe")), 12)
@@ -85,17 +93,16 @@ final class NightEngineSuite extends FunSuite:
   }
 
   test("clock, window, lighting and movement curves follow all eight briefs") {
-    val pressures = Vector(-1, 1040, 940, 1040, 880, 800, 760, 720)
+    val pressures = Vector(-1, 1040, 940, 1040, 880, 800, -1, -1)
     val counts = Vector(1, 2, 2, 2, 3, 3, 3, 3)
     (1 to 8).foreach { n =>
       val w = make(n)
       assertEquals(wire(w).hcursor.get[Int]("pressure").toOption.get, pressures(n - 1))
       assertEquals(windows(w).size, counts(n - 1))
-      assertEquals(advance(w, 100).dim, n == 6 || n == 8)
+      assertEquals(advance(w, 100).dim, n == 6)
       assertEquals(advance(w, 130).dim, false)
-      val onBelt = w.copy(player = NightPoint(240, 180))
-      assertEquals(advance(onBelt, 5).player != onBelt.player, n >= 7)
-      assertEquals(advance(w, 5).player, w.player)
+      if n < 7 then assertEquals(advance(w, 5).player, w.player)
+      else assert(w.puzzle.nonEmpty)
     }
     assertEquals(advance(make(1), 3000).phase, NightPhase.Serving)
     assertEquals(advance(make(1), 200, packet(mx = 1, my = -1)).player, NightPoint(464, 98))
@@ -110,7 +117,7 @@ final class NightEngineSuite extends FunSuite:
     val horizontal = fire(tutorial, 0, 220)
     assert(horizontal.exists(_.event == NightEvent.Bounce))
     assertEquals(horizontal.last.event, NightEvent.Miss)
-    val next = deliver(make(4))
+    val next = walk(deliver(make(4)),NightPoint(240,174),2.1)
     assert(next.bank)
     val (showing, slot) = inspect(next)
     val blocked = fire(showing, targets(slot), 78).last
@@ -135,29 +142,37 @@ final class NightEngineSuite extends FunSuite:
     val safe = walk(toPanel, NightPoint(240,260), 23)
     assertEquals(safe.phase, NightPhase.Escaped)
     assertEquals(advance(safe, 20), safe)
-    val timedOut = advance(make(8), 720)
+    val timedOut = advance(make(6), 800)
     assertEquals(timedOut.phase, NightPhase.Escaping)
     val failed = advance(timedOut, 200)
     assertEquals(failed.phase, NightPhase.Lost)
     assertEquals(advance(failed, 30), failed)
   }
 
-  test("all 24 orders and all eight clock-outs are achievable from public clues with ordinary inputs") {
-    (1 to 8).foreach { n =>
-      val atDoor = (1 to 3).foldLeft(make(n))((world, _) => deliver(world))
+  test("five delivery nights can finish on playable paths, and the sixth changes rooms after two bottles") {
+    (1 to 5).foreach { n =>
+      val start = if n == 3 then walk(make(n),NightPoint(240,154),2) else make(n)
+      val atDoor = (1 to 3).foldLeft(start) { (w,order) =>
+        val ready = if n == 4 && order == 2 then
+          walk(walk(w,NightPoint(48,220),2),NightPoint(48,148),2) else w
+        deliver(ready)
+      }
       assertEquals(atDoor.phase, NightPhase.Clockout)
       assertEquals(atDoor.clean, 3)
       val won = walk(atDoor, NightPoint(240, 260), 23)
       assertEquals(won.phase, NightPhase.Won)
       assertEquals(advance(won, 10), won)
     }
+    val story = deliver(deliver(make(6)))
+    assert(story.puzzle.nonEmpty && story.delivered == 2)
+    assertEquals(wire(story).hcursor.get[Int]("pressure").toOption,Some(-1))
   }
 
   test("counter hunter stays under the glass for 25 ticks, closes distance, catches early and can be outrun") {
     def hunter(w: NightWorld): NightPoint =
       val pos = wire(w).hcursor.downField("chase")
       NightPoint(pos.get[Double]("x").toOption.get, pos.get[Double]("y").toOption.get)
-    val incident = advance(make(8), 720)
+    val incident = advance(make(6), 800)
     val start = hunter(incident)
     assertEquals(start, NightPoint(240, 87))
     assertEquals(hunter(advance(incident, 25)), start)
@@ -185,7 +200,37 @@ final class NightEngineSuite extends FunSuite:
   }
 
   test("draws replay exactly with one seed, and real windows vary across distinct seeds") {
-    val options = (0L until 48L).map(s => inspect(make(8, s))._2).toSet
+    val options = (0L until 48L).map(s => inspect(make(5, s))._2).toSet
     assertEquals(options, Set(0,1,2))
     assertEquals(deliver(make(5, 2429L)), deliver(make(5, 2429L)))
+  }
+  test("tile warns for a full second and recovers; crossing reveals the supporting hand without a mistake") {
+    val initial = make(3)
+    assertEquals(fire(initial,240,78).last.event,NightEvent.Blocked)
+    val standing = walk(initial,NightPoint(240,190),2)
+    def tile(w: NightWorld) = w.floor.tiles.find(t => t.x == 240 && t.y == 190).get
+    assertEquals(tile(standing).state,StoryTileState.Warn)
+    val almost = advance(standing,tile(standing).ticks-1)
+    assertEquals(almost.player,standing.player)
+    val fallen = NightEngine.step(almost,NightInput.idle)
+    assertEquals(fallen.player,NightPoint(240,220))
+    assertEquals(fallen.floor.cue,FactoryCue.TileFall)
+    assertEquals(fallen.delivered,0)
+    assertEquals(tile(fallen).state,StoryTileState.Hole)
+    assertEquals(tile(advance(fallen,32)).state,StoryTileState.Mend)
+    assertEquals(tile(advance(fallen,48)).state,StoryTileState.Solid)
+    val clean = walk(initial,NightPoint(240,154),2)
+    assert(clean.floor.supplied)
+    assertEquals(clean.floor.cue,FactoryCue.SawHand)
+    assert(FactoryFloor.view(clean).marks.exists(_.kind == "hand"))
+  }
+  test("the first shift records real movement and stillness at five frames per second") {
+    val still = advance(make(1),80)
+    assertEquals(still.firstNightTrace,Vector.fill(21)(still.player))
+    val moving = advance(still,12,packet(mx=1))
+    assertEquals(moving.firstNightTrace.takeRight(3),Vector(NightPoint(256,220),NightPoint(272,220),NightPoint(288,220)))
+    val tape = moving.firstNightTrace
+    val six = NightEngine.start(NightLevel.from(6).get,12L,tape)
+    assertEquals(advance(six,5).firstNightTrace,tape)
+    assert(!wire(six).noSpaces.contains("firstNightTrace"))
   }

@@ -2,6 +2,8 @@ package soda.night
 
 import cats.effect.IO
 import io.circe.Json
+import io.circe.parser.decode
+import io.circe.syntax.*
 import java.sql.Connection
 import java.util.UUID
 import scala.util.Using
@@ -14,8 +16,8 @@ final case class NightProfile(cleared: Vector[NightLevel], bestClean: Int):
     "cleared" -> Json.fromValues(cleared.map(n => Json.fromInt(n.value))),
     "bestClean" -> Json.fromInt(bestClean))
 
-private[night] final case class Receipt(id: RunId, fresh: Boolean)
-private[night] final case class Clear(player: PlayerId, level: NightLevel, clean: Int)
+private[night] final case class Receipt(id: RunId, fresh: Boolean, trace: Vector[NightPoint] = Vector.empty)
+private[night] final case class Clear(player: PlayerId, level: NightLevel, clean: Int, trace: Vector[NightPoint])
 
 final class NightJournal(db: Database):
   private def readProfile(conn: Connection, player: PlayerId): NightProfile =
@@ -56,7 +58,14 @@ final class NightJournal(db: Database):
           s.setObject(4, proposed.uuid)
           s.executeUpdate()
         }
-        Right(Receipt(proposed, fresh = true))
+        val trace = if night.value != 6 then Vector.empty else
+          Sql.statement(conn,"SELECT points::text FROM night_first_trace WHERE player_id=?") { s =>
+            s.setObject(1,player.value)
+            Sql.first(s)(r => decode[Vector[(Double,Double)]](r.getString(1)).fold(
+              _ => throw new IllegalStateException("Invalid night trace"),_.map((x,y) => NightPoint(x,y))))
+              .getOrElse(Vector.empty)
+          }
+        Right(Receipt(proposed, fresh = true,trace))
   }
 
   private[night] def record(finish: Clear): IO[Unit] = db.transaction { conn =>
@@ -68,6 +77,13 @@ final class NightJournal(db: Database):
       s.executeUpdate()
       ()
     }
+    if finish.level.value == 1 then
+      Sql.statement(conn,"INSERT INTO night_first_trace(player_id,points) VALUES(?,?::jsonb) ON CONFLICT DO NOTHING") { s =>
+        s.setObject(1,finish.player.value)
+        s.setString(2,finish.trace.map(p => (p.x,p.y)).asJson.noSpaces)
+        s.executeUpdate()
+      }
+    ()
   }
 
 object NightJournal:
@@ -78,3 +94,5 @@ object NightJournal:
     Sql.ddl(conn, """CREATE TABLE IF NOT EXISTS night_start_receipts (
       player_id uuid NOT NULL REFERENCES soda_players(id), request_id uuid NOT NULL, night smallint NOT NULL CHECK (night BETWEEN 1 AND 8),
       run_id uuid NOT NULL UNIQUE, PRIMARY KEY(player_id,request_id))""")
+    Sql.ddl(conn,"""CREATE TABLE IF NOT EXISTS night_first_trace (
+      player_id uuid PRIMARY KEY REFERENCES soda_players(id), points jsonb NOT NULL CHECK(jsonb_typeof(points)='array'))""")

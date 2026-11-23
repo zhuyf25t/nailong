@@ -70,14 +70,20 @@ class Driver:
 
     def witness(self):
         state = self.read()
-        direction = "right" if state["memory"] == "left" else "left"
-        self.send("probe", (1 if direction == "right" else -1, 0))
-        visible = eventually(self.read, lambda v: v["probe"] == direction
-                             and all(w["look"] != "still" for w in v["windows"]))
-        active = [w["slot"] for w in visible["windows"] if w["look"] == direction]
+        directions = ("left", "right") if state["night"] == 5 else (
+            "right" if state["memory"] == "left" else "left",)
+        active = {w["slot"] for w in state["windows"]}
+        for direction in directions:
+            self.send("probe", (1 if direction == "right" else -1, 0))
+            visible = eventually(self.read, lambda v: v["probe"] == direction and v["probeTicks"] > 0
+                                 and all(w["look"] != "still" for w in v["windows"]))
+            matches = {w["slot"] for w in visible["windows"] if w["look"] == direction}
+            if len(directions) == 2:
+                assert len(matches) == 2, matches
+            active &= matches
         assert len(active) == 1
         assert all(set(w) == {"slot", "actor", "look"} for w in visible["windows"])
-        return visible, active[0]
+        return visible, active.pop()
 
     def walk_to(self, target, until):
         def walk():
@@ -89,12 +95,160 @@ class Driver:
             return self.send(move=(dx / distance, dy / distance))
         return eventually(walk, until, seconds=10)
 
+    def walk(self, point, radius=6):
+        self.walk_to(point, lambda v: math.dist(pos(v["player"]), point) <= radius)
+        return self.send()  # release movement
+
+    def mark(self, *kinds):
+        return next(pos(m) for m in self.read()["story"]["marks"] if m["kind"] in kinds)
+
+    def step(self, name, seconds=6):
+        return eventually(self.read, lambda v: v["story"]["step"] == name, seconds)
+
+    def interact(self, mark, next_step):
+        self.walk(self.mark(mark))
+        self.send("throw")
+        return self.step(next_step)
+
+    def wait_ticks(self, count):
+        goal = self.read()["tick"] + count
+        return eventually(self.read, lambda s: s["tick"] >= goal, count * .05 + 4)
+
+    def maintenance(self):
+        self.interact("hatch", "observe_windows")
+        view = self.read()
+        windows = sorted(pos(m) for m in view["story"]["marks"] if m["kind"] == "window")
+        assert len(windows) == 3
+        first = view["tick"]
+        traces, squared_error = {}, [0., 0., 0.]
+        samples = 0
+        while view["tick"] - first < 112:
+            t = view["tick"]
+            elapsed = t - first
+            target = (178, 142) if elapsed < 37 else (315, 190) if elapsed < 77 else (224, 220)
+            here = pos(view["player"])
+            traces[t] = here
+            if t-40 in traces and elapsed >= 47:
+                x, y = traces[t-40]
+                for person in view["story"]["people"]:
+                    assert person["kind"].startswith("monitor")
+                    slot = person["slot"]
+                    projected = (windows[slot][0] + (x-240)*.11, 76 + (y-180)*.10)
+                    squared_error[slot] += math.dist(pos(person), projected)**2
+                samples += 1
+            vector = (target[0]-here[0], target[1]-here[1])
+            length = max(1, math.hypot(*vector))
+            self.send(move=(vector[0]/length, vector[1]/length))
+            view = eventually(self.read, lambda s: s["tick"] > t)
+        errors = sorted(squared_error)
+        assert samples > 12 and errors[1] - errors[0] > samples, (samples, errors)
+        delayed = squared_error.index(errors[0])
+        self.walk(windows[delayed])
+        self.send("throw")
+        self.step("delay_door")
+        self.walk(self.mark("plate", "plate_on"))
+        self.wait_ticks(44)
+        x, y = self.mark("gate", "gate_open")
+        self.walk_to((x+20,y), lambda s: s["story"]["step"] == "old_turn")
+        self.walk(self.mark("old_tape"))
+        self.send("throw")
+        self.step("exit_maintenance")
+        self.walk_to(self.mark("exit"), lambda s: s["phase"] in ("won","clockout"))
+
+    def signatures(self):
+        self.interact("ledger", "record_one")
+        for ordinal in ("one", "two"):
+            self.interact("panel", "take_" + ordinal)
+            self.walk(self.mark("plate", "plate_on"))
+            self.wait_ticks(52)
+            self.send("throw")
+            self.step("play_" + ordinal)
+            if ordinal == "one":
+                self.walk_to((254,174), lambda s: s["story"]["step"] == "record_two")
+            else:
+                self.walk((316,147))
+                self.walk((346,147))
+                self.walk_to((431,164), lambda s: s["story"]["step"] == "help_hold")
+                self.walk_to((433,164), lambda s: s["story"]["step"] == "exit_signature")
+        self.walk_to(self.mark("exit"), lambda s: s["phase"] in ("won","clockout"))
+
+    def defend_round(self):
+        view = self.step("sleep_reveal")
+        (frog,) = [pos(p) for p in view["story"]["people"] if p["kind"] == "sleep_frog"]
+        view = self.step("sleep_watch")
+        braced = set()
+        while view["story"]["step"] == "sleep_watch":
+            story = view["story"]
+            shutters = [pos(p) for p in story["people"] if p["kind"] == "sleep_shutter"]
+            assert len(shutters) == 4
+            next_point = min(shutters, key=lambda p: math.dist(frog, p))
+            assert math.dist(frog, next_point) < 65
+            frog = next_point
+            marks = {m["kind"]: pos(m) for m in story["marks"]}
+            if "brace_on" in marks:
+                braced.add(marks["brace_on"])
+            station = marks.get("brace")
+            hazard = marks.get("hand_warn") or marks.get("hand")
+            x, y = pos(view["player"])
+            action, move = "none", (0,0)
+            if hazard and math.dist((x,y),hazard) < 26:
+                dx, dy = 240-hazard[0], 202-hazard[1]
+                move = (dx/math.hypot(dx,dy), dy/math.hypot(dx,dy)) if dx or dy else (1,0)
+            elif station and station not in braced:
+                if math.dist((x,y),station) <= 9:
+                    action = "hold"
+                else:
+                    dx, dy = station[0]-x, station[1]-y
+                    move = (dx/math.hypot(dx,dy), dy/math.hypot(dx,dy))
+            prev = view["tick"]
+            view = self.send(action, move=move)
+            if view["tick"] == prev:
+                view = eventually(self.read, lambda s:s["tick"] > prev)
+        assert view["story"]["step"] == "wake_probe" and len(braced) == view["story"]["round"]
+        self.walk(frog)
+        self.send("probe")
+        view = self.step("wake_toss")
+        (looks,) = [pos(p) for p in view["story"]["people"] if p["kind"] == "wake_look"]
+        assert math.dist(looks, frog) < 28
+        self.send("throw")
+
+    def defense(self):
+        for round_number in (1,2,3):
+            assert self.step("sleep_reveal")["story"]["round"] == round_number
+            self.defend_round()
+        self.step("ward_face")
+        self.step("ward_exit")
+        self.walk_to(self.mark("exit"), lambda s: s["phase"] in ("won","clockout"))
+
     def finish(self):
-        for count in range(3):
-            state, slot = self.witness()
-            self.send("throw", self.aim_for(state, slot, state["bank"]))
+        night = self.read()["night"]
+        for count in range(3 if night <= 5 else 2 if night == 6 else 0):
+            view = self.read()
+            if view["story"]["step"] == "supply":
+                self.walk_to(self.mark("supply"), lambda s: s["story"]["step"] == "delivery")
+                self.send()
+            if night == 4 and count >= 1:
+                self.walk(self.mark("safe"))
+            if night == 1:
+                assert len(view["windows"]) == 1
+                state, slot = view, view["windows"][0]["slot"]
+            else:
+                state, slot = self.witness()
+            self.send("throw", self.aim_for(state, slot))
             eventually(self.read, lambda v: v["delivered"] == count + 1)
-        return self.walk_to((240, 260), lambda v: v["phase"] == "won")
+        if night == 6:
+            self.maintenance()
+        elif night == 7:
+            self.signatures()
+        elif night == 8:
+            self.defense()
+        if self.read()["phase"] == "clockout":
+            self.walk_to((240, 260), lambda v: v["phase"] == "won")
+        return eventually(self.read, lambda v: v["phase"] == "won")
+
+
+def pos(entity):
+    return (entity["x"], entity["y"])
 
 
 def account():
@@ -108,6 +262,7 @@ def ticket(night):
 def run(all_nights=False, wait_restart=False):
     health = call("/health")
     assert health["status"] == "ok" and health["game"] == "nightshift" and health["rulesPause"] is True
+    assert health.get("storyCampaign") == 2, health
     credentials = account()
     token = call("/v1/sessions", credentials)["token"]
     foreign = call("/v1/sessions", account())["token"]
@@ -169,7 +324,7 @@ def run(all_nights=False, wait_restart=False):
             shift.finish()
             saved = call("/v1/night/profile", token=token)
             assert saved == {"unlocked": min(night + 1, 8), "cleared": list(range(1, night + 1)), "bestClean": 3}
-            print(f"PASS night {night} through actual 20 Hz movement and deliveries.", flush=True)
+            print(f"PASS night {night} through normal player inputs and public room clues.", flush=True)
     latest = call("/v1/night/profile", token=token)
     renewed = call("/v1/sessions", credentials)["token"]
     assert call("/v1/night/profile", token=renewed) == latest

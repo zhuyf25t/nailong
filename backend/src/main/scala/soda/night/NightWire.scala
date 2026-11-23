@@ -6,7 +6,7 @@ import java.util.UUID
 object NightWire:
   def snapshot(world: NightWorld, runId: UUID, ack: Long, paused: Boolean = false): Json =
     val serving = world.stage match
-      case stage: ShiftStage.Serving => Some(stage)
+      case stage: ShiftStage.Serving if world.puzzle.isEmpty => Some(stage)
       case _ => None
     val chase = world.stage match
       case stage: ShiftStage.Escaping => Some(stage)
@@ -14,7 +14,7 @@ object NightWire:
     val gesture = serving.flatMap(_.gesture)
     val visible = gesture.filter(_.visible(world.tick))
     val windows = world.night.windows.map { slot =>
-      val direction = visible.map(g => if slot == world.recipient then g.direction else world.memory)
+      val direction = visible.map(g => world.looks(slot,g.direction))
       Json.obj("slot" -> Json.fromInt(slot.index), "actor" -> Json.fromString(world.actor),
         "look" -> Json.fromString(direction.fold("still")(_.wire)))
     }
@@ -23,6 +23,7 @@ object NightWire:
         "vx" -> Json.fromDoubleOrNull(b.vx), "vy" -> Json.fromDoubleOrNull(b.vy),
         "bounced" -> Json.fromBoolean(b.bounced))
     }
+    val story = world.puzzle.fold(FactoryFloor.view(world))(StoryPuzzles.view(world,_))
     Json.obj(
       "runId" -> Json.fromString(runId.toString), "ack" -> Json.fromLong(ack), "tick" -> Json.fromInt(world.tick),
       "paused" -> Json.fromBoolean(paused),
@@ -37,4 +38,4 @@ object NightWire:
       "escapeTicks" -> Json.fromInt(chase.fold(0)(_.ticks)), "bottle" -> bottle,
       "chase" -> chase.fold(Json.Null)(s => Json.obj("x" -> Json.fromDoubleOrNull(s.hunter.x), "y" -> Json.fromDoubleOrNull(s.hunter.y))),
       "event" -> Json.fromString(world.event.wire), "eventId" -> Json.fromLong(world.eventId),
-      "delivered" -> Json.fromInt(world.delivered))
+      "delivered" -> Json.fromInt(world.delivered),"story" -> story.json)

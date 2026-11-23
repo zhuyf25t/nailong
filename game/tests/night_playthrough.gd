@@ -12,12 +12,11 @@ var last_notice := ""
 var campaign_clears: Array[int] = []
 var captures_done: Dictionary = {}
 var has_bank := false
-var saw_dim := false
-var saw_belt := false
 var failure_branches := 0
 var restore_sound := false
 var account_name := ""
 var account_password := ""
+const Chapters = preload("res://tests/night_chapters.gd")
 
 const INPUTS := ["night_left", "night_right", "night_up", "night_down"]
 const WINDOWS := [104.0, 240.0, 376.0]
@@ -25,8 +24,13 @@ const WINDOWS := [104.0, 240.0, 376.0]
 func _initialize() -> void:
 	# The production scene reads/writes its preferences on startup. Keep every
 	# test login, rules acknowledgement and mute toggle outside the player's user://.
-	ProjectSettings.set_setting("application/config/use_custom_user_dir", true)
-	ProjectSettings.set_setting("application/config/custom_user_dir_name", "OnlyThreeOnShift-QA")
+	# With an externally isolated app-data directory, preserve the renderer's
+	# startup path so that GPU shader caches keep their original location.
+	var isolated := OS.get_environment("NIGHT_QA_HOME").replace("\\","/").simplify_path()
+	var user_path := OS.get_user_data_dir().replace("\\","/").simplify_path()
+	if isolated.is_empty() or not isolated.is_absolute_path() or not user_path.begins_with(isolated + "/"):
+		ProjectSettings.set_setting("application/config/use_custom_user_dir", true)
+		ProjectSettings.set_setting("application/config/custom_user_dir_name", "OnlyThreeOnShift-QA")
 	if DirAccess.make_dir_recursive_absolute(OS.get_user_data_dir()) != OK:
 		call_deferred("_fail", "could not create the isolated QA preferences directory")
 		return
@@ -38,6 +42,8 @@ func _initialize() -> void:
 			capture_dir = args[i].trim_prefix("--capture-dir=")
 		elif args[i] == "--capture-dir" and i + 1 < args.size():
 			capture_dir = args[i + 1]
+	if not capture_dir.is_empty():
+		root.unfocusable = true
 	call_deferred("_run")
 
 func _state() -> Dictionary:
@@ -56,6 +62,18 @@ func _position() -> Vector2:
 	var pilot: Dictionary = _state().get("player", {})
 	return Vector2(float(pilot.get("x", 0)), float(pilot.get("y", 0)))
 
+func _story() -> Dictionary:
+	return _state().get("story", {})
+
+func _point(marker: Dictionary) -> Vector2:
+	return Vector2(float(marker.x), float(marker.y))
+
+func _marker(kind: String) -> Dictionary:
+	for item: Dictionary in _story().get("marks", []):
+		if item.get("kind") == kind:
+			return item
+	return {}
+
 func _fail(description: String) -> bool:
 	if not halted:
 		halted = true
@@ -66,9 +84,10 @@ func _fail(description: String) -> bool:
 				_click(mute.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 		var state := _state() if is_instance_valid(app) and app.get("api") != null else {}
 		var focus := root.has_focus()
-		push_error("Night shift playthrough FAIL: %s (night=%s order=%s phase=%s event=%s tick=%s pos=%s focus=%s notice=%s)" %
+		push_error("Night shift playthrough FAIL: %s (night=%s order=%s phase=%s event=%s tick=%s pos=%s focus=%s notice=%s story=%s)" %
 			[description, state.get("night"), state.get("order"), state.get("phase"),
-			state.get("event"), state.get("tick"), state.get("player"), focus, last_notice])
+			state.get("event"), state.get("tick"), state.get("player"), focus, last_notice,
+			[state.get("story", {}).get("step"),state.get("story", {}).get("cue")]])
 		quit(1)
 	return false
 
@@ -94,6 +113,11 @@ func _find(node_name: String) -> Node:
 func _ready_button(node_name: String) -> bool:
 	var button := _find(node_name) as BaseButton
 	return button != null and button.is_visible_in_tree() and not button.disabled
+
+func _has_caption() -> bool:
+	var subtitle := _find("SubtitleText") as Label
+	var speaker := _find("SubtitleSpeaker") as Label
+	return subtitle != null and subtitle.is_visible_in_tree() and not subtitle.text.strip_edges().is_empty() and speaker != null and not speaker.text.strip_edges().is_empty()
 
 func _click(point: Vector2, index: MouseButton) -> void:
 	var motion := InputEventMouseMotion.new()
@@ -140,6 +164,9 @@ func _move_to(target: Vector2, done: Callable, label: String, timeout := 7.0) ->
 		await process_frame
 	_release_keys()
 	return true
+
+func _walk(target: Vector2, radius := 7.0, label := "reach station") -> bool:
+	return await _move_to(target, func(): return _position().distance_to(target) <= radius, label, 11)
 
 func _login() -> bool:
 	if not await _press("AccountButton"): return false
@@ -213,6 +240,30 @@ func _identify(real: bool) -> int:
 			return int(win.slot)
 	return -1
 
+func _matching_slots() -> Array[int]:
+	var matches: Array[int] = []
+	for win: Dictionary in _state().windows:
+		if win.look == _state().probe: matches.append(int(win.slot))
+	return matches
+
+func _receipt_window(night: int) -> int:
+	if night != 5:
+		if not await _probe(_opposite_previous()): return -1
+		var matches := _matching_slots()
+		return matches[0] if matches.size() == 1 else -1
+	if not await _probe("left"): return -1
+	var left := _matching_slots()
+	if int(_state().order) == 1: await _capture("07a-left-probe")
+	if not await _probe("right"): return -1
+	var right := _matching_slots()
+	var agreed := -1
+	if left.size() != 2 or right.size() != 2: return -1
+	for slot in left:
+		if slot in right:
+			if agreed != -1: return -1
+			agreed = slot
+	return agreed
+
 func _opposite_previous() -> String:
 	return "right" if _state().get("memory") == "left" else "left"
 
@@ -254,20 +305,22 @@ func _training_orders() -> bool:
 func _service_order(night: int, order: int) -> bool:
 	var start := _state()
 	if int(start.get("order", 0)) != order or start.get("phase") != "serving": return _fail("unexpected ticket")
-	if not await _probe(_opposite_previous()): return false
-	var slot := _identify(true)
-	var matching := 0
-	for win: Dictionary in _state().windows:
-		if win.look == _state().probe: matching += 1
-	if slot < 0 or matching != 1: return _fail("probe should distinguish exactly one recipient")
-	if night == 3 and order == 1: await _capture("04-echo")
-	if night == 5 and order == 1: await _capture("07-three-windows")
+	if _story().get("step") == "supply":
+		if not await _collect_supply(order == 1): return false
+	var slot := await _receipt_window(night)
+	if slot < 0: return _fail("observable hand gestures should distinguish one recipient")
+	if night == 5 and order == 1: await _capture("07-two-probes")
 	var bank := bool(_state().bank)
 	if night == 4 and order == 2:
 		# The shutter rejects a direct delivery without stealing the bottle or advancing the ticket.
 		_throw(slot, false)
 		if not await _until(func(): return _state().get("event") == "blocked" and _state().get("bottle") == null, 5, "shutter blocks a direct throw"): return false
 		if int(_state().delivered) != order - 1: return _fail("blocked toss advanced the ticket")
+		if not await _walk(Vector2(240,174), 7, "reach bank rail platform"): return false
+		bank = true
+	if night == 4 and order == 3:
+		if not await _walk(Vector2(432,148), 7, "reach side platform for direct delivery"): return false
+		bank = false
 	_throw(slot, bank)
 	var deadline := Time.get_ticks_msec() + 7000
 	var bounced := false
@@ -285,20 +338,24 @@ func _service_order(night: int, order: int) -> bool:
 	has_bank = has_bank or bounced
 	return true
 
-func _darkness() -> bool:
-	if not await _until(func(): return _state().get("dim") == true, 13, "dark window"): return false
-	saw_dim = true
-	if not await _probe(_opposite_previous()): return false
-	await _capture("08-blackout")
-	return true
-
-func _conveyor() -> bool:
-	if not await _move_to(Vector2(240, 184), func(): return absf(_position().y - 184) < 7, "enter conveyor"): return false
-	var before := _position()
-	if not await _until(func(): return absf(_position().x - before.x) >= 6, 4, "visible conveyor drift"): return false
-	saw_belt = true
-	if not await _move_to(Vector2(_position().x, 220), func(): return _position().y > 208, "leave conveyor"): return false
-	return true
+func _collect_supply(check_fall: bool) -> bool:
+	var pickup := _marker("supply")
+	if pickup.is_empty(): return _fail("bottle station is not marked")
+	if check_fall:
+		var row: Array = _story().get("tiles", [])
+		if row.is_empty(): return _fail("missing unsafe tiles")
+		var tile: Dictionary = row[0]
+		for other: Dictionary in row:
+			if _position().distance_to(_point(other)) < _position().distance_to(_point(tile)): tile = other
+		var count := int(_state().delivered)
+		if not await _walk(_point(tile), 4, "stand on a cracked test tile"): return false
+		await _capture("04-cracked-tile")
+		if not await _until(func(): return _story().get("cue") == "tile_fall", 3, "unsafe tile gives way"): return false
+		if _phase() != "serving" or int(_state().delivered) != count or _position().distance_to(Vector2(240,220)) > 9:
+			return _fail("fall should return the player without losing completed orders")
+		await _capture("04b-open-tile")
+		await create_timer(2.6).timeout
+	return await _move_to(_point(pickup), func(): return _story().get("step") == "delivery", "cross the cracked floor and obtain soda", 8)
 
 func _wrong_delivery(escape: bool) -> bool:
 	if not await _probe(_opposite_previous()): return false
@@ -321,12 +378,14 @@ func _wrong_delivery(escape: bool) -> bool:
 		12, "retry creates a fresh first order")
 
 func _win(night: int) -> bool:
-	if _phase() != "clockout" or int(_state().delivered) != 3: return _fail("clockout after three receipts")
-	if not await _move_to(Vector2(240,260), func(): return _phase() == "won", "win at south exit"): return false
+	if night < 6:
+		if _phase() != "clockout" or int(_state().delivered) != 3: return _fail("clockout after three receipts")
+		if not await _move_to(Vector2(240,260), func(): return _phase() == "won", "win at south exit"): return false
+	if not await _until(func(): return _phase() == "won", 6, "complete this night"): return false
 	if not await _until(func(): return _ready_button("RosterButton"), 9, "result UI"): return false
-	if night == 8: await _capture("09-last-shift")
+	if night == 8: await _capture("15-ending")
 	campaign_clears.append(night)
-	print("Night shift verified ", night, "/8, delivered 3, exit stamped")
+	print("Night shift verified ", night, "/8, signed bottles ", _state().delivered)
 	if not await _press("RosterButton"): return false
 	return await _until(func():
 		return _page() == "roster" and _profile().get("cleared", []).has(night) and int(_profile().get("unlocked", 0)) >= mini(8, night+1),
@@ -360,6 +419,7 @@ func _run() -> void:
 	restore_sound = mute.text.contains("开")
 	if restore_sound and not await _press("MuteButton"): return
 	if not (_find("MuteButton") as Button).text.contains("关"): _fail("silent mode indicator"); return
+	var chapters := Chapters.new(self)
 	for night in range(1, 9):
 		if not await _enter_night(night): return
 		if night == 1:
@@ -371,18 +431,20 @@ func _run() -> void:
 			for win: Dictionary in _state().windows:
 				if win.look != _state().memory: _fail("echo matches old gesture"); return
 			if not await _wrong_delivery(true) or not await _wrong_delivery(false): return
-		if night == 6 and not await _darkness(): return
-		if night == 7 and not await _conveyor(): return
-		for order in range(1, 4):
+		var orders := 3 if night <= 5 else (2 if night == 6 else 0)
+		for order in range(1, orders + 1):
 			if not await _service_order(night, order): return
+		if night == 6 and not await chapters.maintenance(): return
+		if night == 7 and not await chapters.signatures(): return
+		if night == 8 and not await chapters.clockhall(): return
 		if not await _win(night): return
 	if not await _press("LogoutButton") or not await _login(): return
-	if not await _until(func(): return _profile().get("cleared", []).size() == 8 and _profile().get("bestClean") == 3, 9, "durable campaign record on fresh login"): return
-	if not has_bank or not saw_dim or not saw_belt or failure_branches != 2: _fail("missing campaign coverage"); return
-	await _capture("10-stamped-roster")
+	if not await _until(func(): return _profile().get("cleared", []).size() == 8 and _profile().get("bestClean") == 3, 9, "durable campaign on fresh login"): return
+	if not has_bank or failure_branches != 2: _fail("missing campaign coverage"); return
+	await _capture("16-stamped-roster")
 	if not await _replay_first_night(): return
 	if restore_sound and not await _press("MuteButton"): return
-	await _finish("Night shift playthrough PASS · 8 nights, 24 deliveries, bounced bottle, blackout, conveyor, escape, capture, retry, re-login")
+	await _finish("Night shift playthrough PASS · eight nights, two-probe deduction, cracked tiles, delayed double, recorded gates, three rounds of shutter defense, re-login")
 
 func _finish(message: String) -> void:
 	_release_keys()

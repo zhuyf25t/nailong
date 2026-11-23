@@ -3,7 +3,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import uuid
@@ -19,6 +19,15 @@ JRE_MODULES = (
     "jdk.charsets,jdk.crypto.ec,jdk.unsupported"
 )
 PACKAGE_NAME = "Only-Three-on-Shift-Windows-x64.zip"
+RUNTIME_NOTICES = {
+    "licenses/Java-NOTICE.txt", "licenses/Java-upstream-release.txt",
+    "licenses/server_license.txt", "licenses/commandlinetools_3rd_party_licenses.txt",
+}
+
+
+def sha256(path):
+    with path.open("rb") as fd:
+        return hashlib.file_digest(fd, "sha256").hexdigest()
 
 
 def run(command, cwd=None, expect_clean=False):
@@ -44,8 +53,17 @@ def make_project(engine, target, app):
         copy_file(game / name, project / name)
     for name in ["night", "assets/night"]:
         shutil.copytree(game / name, project / name)
+    for name in ["night/story_ui.gd", "night/story_world.gd", "assets/night/horror/woodcut_screen.png",
+                 "assets/night/horror/frog_ring.png", "assets/night/horror/ending_dawn.png",
+                 "assets/night/audio/sleep_gallery.wav", "assets/night/audio/dawn.wav"]:
+        if not (project / name).is_file():
+            raise RuntimeError(f"Missing eight-night campaign resource: {name}")
     copy_file(game / "tests/night_playthrough.gd", project / "tests/night_playthrough.gd")
+    copy_file(game / "tests/night_chapters.gd", project / "tests/night_chapters.gd")
     copy_file(TOOLS / "distribution_check.gd", project / "tests/distribution_check.gd")
+    assets = sorted("res://" + p.relative_to(project).as_posix() for p in project.rglob("*")
+                    if p.is_file() and p.suffix.lower() not in {".uid", ".import", ".godot"})
+    (project / "night-package-files.json").write_text(json.dumps(assets, ensure_ascii=False), "utf-8")
     copy_file(TOOLS / "export_presets.cfg", project / "export_presets.cfg")
     common = [engine, "--headless", "--path", project]
     run([*common, "--log-file", target / "import.log", "--import"], expect_clean=True)
@@ -93,6 +111,13 @@ def make_server(app, use_classes):
     with ZipFile(server / "night-service.jar", "w", ZIP_DEFLATED) as archive:
         for path in sorted(classes[0].rglob("*.class")):
             archive.write(path, path.relative_to(classes[0]).as_posix())
+        resources = backend / "src/main/resources"
+        for source in sorted(path for path in resources.rglob("*") if path.is_file()):
+            name = source.relative_to(resources)
+            compiled = classes[0] / name
+            if not compiled.is_file() or sha256(compiled) != sha256(source):
+                raise RuntimeError(f"Run prepareLaunch to refresh the backend resource {name}.")
+            archive.write(compiled, name.as_posix())
     libs = []
     for jar in [p for p in entries if p.is_file()]:
         if jar.suffix.lower() != ".jar" or (server / jar.name).exists():
@@ -144,6 +169,38 @@ def make_postgres(pg, app):
         copy_file(pg / name, app / "licenses" / name)
 
 
+def reuse_runtime(previous_zip, app):
+    checksum_file = previous_zip.with_suffix(".sha256")
+    if not checksum_file.is_file():
+        raise RuntimeError(f"Missing runtime source checksum: {checksum_file}")
+    expected = checksum_file.read_text("ascii").split()
+    if not expected or sha256(previous_zip) != expected[0].lower():
+        raise RuntimeError("The existing runtime package does not match its SHA-256.")
+    prefix = "Only Three On Shift/app/"
+    with ZipFile(previous_zip) as archive:
+        for member in archive.infolist():
+            relative = member.filename.removeprefix(prefix)
+            if relative == member.filename or member.is_dir():
+                continue
+            if not (relative in RUNTIME_NOTICES or relative.startswith(
+                    ("java/", "postgres/bin/", "postgres/lib/", "postgres/share/"))):
+                continue
+            parts = PurePosixPath(relative).parts
+            if "\\" in relative or any(part in (".", "..") or ":" in part for part in parts):
+                raise RuntimeError(f"Unexpected runtime path: {relative}")
+            dest = app.joinpath(*parts)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, dest.open("xb") as target:
+                shutil.copyfileobj(source, target)
+    required = RUNTIME_NOTICES | {
+        "java/bin/java.exe", "java/lib/modules", "postgres/bin/postgres.exe",
+        "postgres/bin/initdb.exe", "postgres/bin/pg_ctl.exe", "postgres/share/postgres.bki",
+    }
+    for name in sorted(required):
+        if not (app / name).is_file():
+            raise RuntimeError(f"Runtime source is missing {name}.")
+
+
 def assemble(args, scratch):
     release = scratch / "Only Three On Shift"
     app = release / "app"
@@ -152,8 +209,11 @@ def assemble(args, scratch):
     make_project(args.godot, scratch, app)
     print("Preparing the Scala service and local database...", flush=True)
     make_server(app, args.use_compiled)
-    make_java(args.jdk, app)
-    make_postgres(args.postgres, app)
+    if args.runtime_from:
+        reuse_runtime(args.runtime_from, app)
+    else:
+        make_java(args.jdk, app)
+        make_postgres(args.postgres, app)
     copy_file(TOOLS / "Play.cmd", release / "Play.cmd")
     # Windows PowerShell 5 detects UTF-8 BOM for translated launch messages.
     (app / "launch.ps1").write_text((TOOLS / "launch.ps1").read_text("utf-8-sig"), "utf-8-sig")
@@ -173,6 +233,8 @@ def main():
     parser.add_argument("--jdk", type=Path, default=default_jdk if default_jdk.is_dir() else Path(os.getenv("JAVA_HOME", ".")))
     parser.add_argument("--output", type=Path, default=WORKSPACE / "output/night-shift")
     parser.add_argument("--use-compiled", action="store_true", help="Use the existing prepareLaunch classpath.")
+    parser.add_argument("--runtime-from", type=Path, metavar="ZIP",
+                        help="Reuse only Java/PostgreSQL and their licenses from a checksum-verified release.")
     parser.add_argument("--keep-staging", action="store_true", help="Keep this run's new staging directory for verification.")
     args = parser.parse_args()
     if os.name != "nt":
@@ -193,8 +255,7 @@ def main():
                 if path.is_file():
                     zipped.write(path, path.relative_to(scratch).as_posix())
         destination = args.output.resolve() / PACKAGE_NAME
-        with archive.open("rb") as fd:
-            checksum = hashlib.file_digest(fd, "sha256").hexdigest()
+        checksum = sha256(archive)
         staged_zip = destination.with_suffix(".zip.new")
         shutil.copyfile(archive, staged_zip)
         os.replace(staged_zip, destination)

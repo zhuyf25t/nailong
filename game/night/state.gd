@@ -64,6 +64,53 @@ static func profile(raw: Variant) -> Dictionary:
 			return {}
 	return {"unlocked":int(raw.unlocked), "cleared":completed, "bestClean":int(raw.bestClean)}
 
+static func _story_points(raw: Variant, group: String) -> Variant:
+	if typeof(raw) != TYPE_ARRAY or raw.size() > 160:
+		return null
+	var result: Array[Dictionary] = []
+	for item: Variant in raw:
+		if typeof(item) != TYPE_DICTIONARY or not _number(item.get("x"), 0, 480) or not _number(item.get("y"), 0, 288):
+			return null
+		var point := {"x":float(item.x), "y":float(item.y)}
+		if group == "tiles":
+			if not _choice(item.get("state"), ["solid", "warn", "hole", "mend"]) or not integer(item.get("ticks"), 0, MAX_WIRE_INT):
+				return null
+			point.state = str(item.state)
+			point.ticks = int(item.ticks)
+		else:
+			if typeof(item.get("kind")) != TYPE_STRING or item.kind.is_empty() or item.kind.length() > 48:
+				return null
+			point.kind = str(item.kind)
+			if group == "people":
+				if not integer(item.get("slot"), -1, 8):
+					return null
+				point.slot = int(item.slot)
+		result.append(point)
+	return result
+
+static func _story(raw: Variant) -> Dictionary:
+	if typeof(raw) != TYPE_DICTIONARY:
+		return {}
+	for key: String in ["step", "room", "objective", "cue"]:
+		if typeof(raw.get(key)) != TYPE_STRING or raw[key].length() > (240 if key == "objective" else 80):
+			return {}
+	if not integer(raw.get("stageTick"), 0, MAX_WIRE_INT) or not integer(raw.get("cueId"), 0, MAX_WIRE_INT):
+		return {}
+	var story := {"step":str(raw.step), "room":str(raw.room), "objective":str(raw.objective), "cue":str(raw.cue),
+		"stageTick":int(raw.stageTick), "cueId":int(raw.cueId)}
+	if not integer(raw.get("round"), 0, 3) or not integer(raw.get("sleepMax"), 0, 1200) or not integer(raw.get("braceMax"), 0, 120):
+		return {}
+	if not integer(raw.get("sleepTicks"), 0, int(raw.sleepMax)) or not integer(raw.get("braceTicks"), 0, int(raw.braceMax)):
+		return {}
+	for key: String in ["round", "sleepMax", "sleepTicks", "braceMax", "braceTicks"]:
+		story[key] = int(raw[key])
+	for group: String in ["tiles", "people", "marks"]:
+		var points: Variant = _story_points(raw.get(group), group)
+		if points == null:
+			return {}
+		story[group] = points
+	return story
+
 static func snapshot(raw: Variant) -> Dictionary:
 	if typeof(raw) != TYPE_DICTIONARY or not valid_uuid(raw.get("runId")):
 		return {}
@@ -134,4 +181,9 @@ static func snapshot(raw: Variant) -> Dictionary:
 			"vy":float(raw.bottle.vy),"bounced":bool(raw.bottle.bounced)}
 	if raw.chase != null:
 		view.chase = {"x":float(raw.chase.x), "y":float(raw.chase.y)}
+	if raw.has("story"):
+		var story := _story(raw.story)
+		if story.is_empty():
+			return {}
+		view.story = story
 	return view

@@ -101,3 +101,13 @@ final class NightBoundarySuite extends FunSuite:
     assert(held.snapshot.hcursor.get[Int]("escapeTicks").contains(200))
     assert(other.snapshot.hcursor.get[Int]("escapeTicks").contains(160))
   }
+  test("holding an interaction transmits a continuous input without queuing taps") {
+    val hold = sample(0,"hold")
+    val active = shift.submit(sequence(0),hold,0).toOption.get
+    assert(active.actions.isEmpty && active.held.action == NightAction.Hold)
+    val refreshed = active.submit(sequence(1),hold,3).toOption.get
+    assert(refreshed.actions.isEmpty && refreshed.inputAt == 3)
+    val released = refreshed.submit(sequence(2),NightInput.idle,4).toOption.get
+    assertEquals(released.held.action,NightAction.Idle)
+    assert(parseInput(raw.replace("probe","hold")).nonEmpty)
+  }

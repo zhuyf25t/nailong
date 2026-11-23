@@ -195,13 +195,14 @@ func _complete(result: int, status: int, _headers: PackedStringArray, body: Pack
 			profile_loaded.emit()
 		Op.START, Op.SAMPLE:
 			var view := Wire.snapshot(raw)
-			if view.is_empty() or (kind == Op.START and view.night != _start_night):
+			if view.is_empty() or not view.has("story") or (kind == Op.START and view.night != _start_night):
 				_failure(kind, 502, null)
 				return
 			if kind == Op.SAMPLE and (current.is_empty() or view.runId != current.runId or view.tick < current.tick or view.ack < _seq):
 				_failure(kind, 502, null)
 				return
-			if kind == Op.START or (not current.is_empty() and (view.order != current.order or view.phase != current.phase)):
+			if kind == Op.START or (not current.is_empty() and (
+					view.order != current.order or view.phase != current.phase or view.story.step != current.story.step)):
 				controls.release_all()
 			current = view
 			_seq = view.ack + 1
