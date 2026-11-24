@@ -160,17 +160,55 @@ class Driver:
         for ordinal in ("one", "two"):
             self.interact("panel", "take_" + ordinal)
             self.walk(self.mark("plate", "plate_on"))
-            self.wait_ticks(52)
+            if ordinal == "one":
+                self.send("throw")
+                early = eventually(self.read, lambda v: v["story"]["cue"] == "seal_early")
+                assert early["story"]["step"] == "take_one"
+            ready = eventually(self.read, lambda v: "seal_ready" in marks(v))
+            assert ready["story"]["plateTicks"] == 40
             self.send("throw")
             self.step("play_" + ordinal)
             if ordinal == "one":
                 self.walk_to((254,174), lambda s: s["story"]["step"] == "record_two")
             else:
-                self.walk((316,147))
-                self.walk((346,147))
-                self.walk_to((431,164), lambda s: s["story"]["step"] == "help_hold")
-                self.walk_to((433,164), lambda s: s["story"]["step"] == "exit_signature")
+                self.upper_aisle()
+                self.walk(self.mark("stand_here"))
+                self.step("help_hold")
+                retry = self.step("sill_wait")
+                assert math.dist(pos(retry["player"]), self.mark("stand_here")) <= 20
+                eventually(lambda: self.send(move=(1,0)), lambda v:v["story"]["step"] == "exit_signature")
         self.walk_to(self.mark("exit"), lambda s: s["phase"] in ("won","clockout"))
+
+    def upper_aisle(self):
+        # Hold one keyboard direction at a time. Each turn uses a visible
+        # landmark on the marked upper aisle and has several pixels of clearance.
+        direction = 0
+        warned = False
+        shadow_positions = set()
+
+        def advance():
+            nonlocal direction, warned
+            view = self.read()
+            if view["story"]["step"] != "play_two":
+                return view
+            x, y = pos(view["player"])
+            if direction == 0 and y <= 150:
+                direction = 1
+            if direction == 1 and x >= 349:
+                direction = 2
+            if direction == 2 and y >= 161:
+                direction = 3
+            visible = marks(view)
+            warned |= "press_warn" in visible
+            if "press_shadow" in visible:
+                assert warned, "a press shadow appeared without a warning"
+                shadow_positions.add(visible["press_shadow"])
+            motion = [(0,-1),(1,0),(0,1),(1,0)][direction]
+            return self.send(move=motion)
+
+        view = eventually(advance, lambda v:v["story"]["step"] != "play_two")
+        assert view["story"]["step"] == "sill_wait" and len(shadow_positions) >= 2
+        self.send()
 
     def defend_round(self):
         view = self.step("sleep_reveal")
@@ -251,6 +289,10 @@ def pos(entity):
     return (entity["x"], entity["y"])
 
 
+def marks(view):
+    return {m["kind"]: pos(m) for m in view["story"]["marks"]}
+
+
 def account():
     return {"name": "shift-" + uuid4().hex[:16], "password": secrets.token_urlsafe(18)}
 
@@ -262,7 +304,7 @@ def ticket(night):
 def run(all_nights=False, wait_restart=False):
     health = call("/health")
     assert health["status"] == "ok" and health["game"] == "nightshift" and health["rulesPause"] is True
-    assert health.get("storyCampaign") == 2, health
+    assert health.get("storyCampaign") == 3, health
     credentials = account()
     token = call("/v1/sessions", credentials)["token"]
     foreign = call("/v1/sessions", account())["token"]

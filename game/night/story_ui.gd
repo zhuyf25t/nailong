@@ -18,10 +18,19 @@ const CUES := {
 	"archive_turn": [["第一夜录像","[本来背对镜头的奶龙转过脸。]"]],
 	"ledger": [["奶龙","这是我的签名。可我还没来过这里。"]],
 	"record_start": [["录音机","[磁带开始转动。]"]],
+	"seal_early": [["录制台","磁带还在转。站上黄踏板，连续录满两秒。"]],
+	"plate_ready": [["录制台","[响了一声。] 录满两秒，点左键封存。"]],
 	"replay_start": [["录音机","[脚步回放。磁带里多了一层呼吸。]"]],
 	"retry_gate": [["铁门","[铁闩落下。回到录制台可以重录。]"]],
-	"gate_pass": [["铁门","[第一道闸在身后锁上。]"]],
-	"echo_hold": [["另一个奶龙","走。我扶着。"]],
+	"press_warn": [["左侧滚轮","[左边响了两下，印刷机正在起动。]"]],
+	"press_shadow": [["印刷机","[左边的压辊追上来了！] 向右跑。"]],
+	"press_caught": [["录音机","[压辊撞上磁带盒，带子倒转。] 第二段重新回放。"]],
+	"tape_rewind": [["录音机","[裂砖落下，磁带倒转。] 从这段回放再来。"]],
+	"sill_wait": [["末闸","[闸板挡住去路。] 在右侧标线上按住 D 或 →。"]],
+	"sill_missed": [["末闸","[闸板砸了下来。] 回到门前，按住 D 或 → 再过。"]],
+	"press_slam": [["末闸","[铁闸轰然砸在你的身后。]"]],
+	"gate_pass": [["铁门","[铁闩在身后扣紧。]"]],
+	"echo_hold": [["另一个奶龙","我扶着。按住 D，向右跑！"]],
 	"sleep_show": [["奶蛋","看清奶蛙在哪扇窗。等它合眼，就只听机器。"]],
 	"sleep_close": [["车间声","[四扇窗同时合眼。机座下开始换轨。]"]],
 	"brace_light": [["机座","[稳机杆发出刺耳的颤音。]"]],
@@ -42,12 +51,13 @@ const HEADINGS := {
 	"delay_door":"借回影压板","old_turn":"查看旧录像","exit_maintenance":"离开检修间",
 	"check_signature":"核对考勤簿","record_one":"录制第一段","take_one":"录下压板动作",
 	"play_one":"穿过第一道闸","record_two":"录制第二段","take_two":"录下压板动作",
-	"play_two":"穿过第二道闸","help_hold":"继续往右跑","exit_signature":"跟上它",
+	"play_two":"穿过第二道闸","sill_wait":"到末闸标线","help_hold":"按住 D 向右冲","sill_clear":"闸落在身后","exit_signature":"往右下班",
 	"sleep_reveal":"认住奶蛙的窗","sleep_watch":"守住机器","wake_probe":"醒了，试探","wake_toss":"送给回应的窗",
 	"ward_face":"出票口","ward_exit":"去东南门"
 }
 
-const TIMED := ["double_thanks","saw_hand","archive_turn","echo_hold","ward_face","ward_clear"]
+const TIMED := ["double_thanks","saw_hand","archive_turn","plate_ready","press_warn","press_shadow","press_caught",
+	"sill_wait","sill_missed","echo_hold","press_slam","tape_rewind","ward_face","ward_clear"]
 const AMBIENT := ["knock","tile_warn","tile_open","hatch","delay_found","delay_open","record_start",
 	"replay_start","gate_pass","sleep_close","brace_light","brace_set","hand_warn","wake_chime","wake_answer"]
 
@@ -69,6 +79,7 @@ var _last_phase := ""
 var _last_event := -1
 var _last_speaker := "奶蛙"
 var _ambient_ticks:Dictionary[String,int] = {}
+var _press_state := ""
 var terminal := false
 
 func clear() -> void:
@@ -80,6 +91,7 @@ func clear() -> void:
 	_last_phase = ""
 	_last_event = -1
 	_ambient_ticks.clear()
+	_press_state = ""
 	_last_speaker = "奶蛙"
 	terminal = false
 
@@ -95,7 +107,7 @@ func submit(view:Dictionary) -> void:
 		_last_cue = serial
 		# A row can contain several crumbling tiles. Caption the audible pattern
 		# once instead of letting repeated ambient cracks drown out dialogue.
-		var minor := cue in ["tile_warn","tile_open","retry_gate","watch_longer","hand_warn","wake_answer"]
+		var minor := cue in ["tile_warn","tile_open","retry_gate","watch_longer","hand_warn","wake_answer","seal_early"]
 		if room=="sleepward" and cue=="wrong_window":
 			_enqueue(cue,[["窗框","[空响。再试一扇，别再认错了。]"]])
 		elif cue=="double_thanks":
@@ -104,6 +116,12 @@ func submit(view:Dictionary) -> void:
 			_enqueue(cue,CUES.get(cue,[]))
 			if minor:
 				_ambient_ticks[cue] = tick
+	var press := press_state(story)
+	if press!=_press_state:
+		_press_state = press
+		var rewinding := cue in ["press_caught","tape_rewind"] and press=="press_warn"
+		if not press.is_empty() and not rewinding:
+			_enqueue(press,CUES[press])
 	var windows:Array = view.get("windows",[])
 	if not windows.is_empty():
 		_last_speaker = "奶蛋" if windows[0].get("actor")=="egg" else "奶蛙"
@@ -148,7 +166,21 @@ func _obsolete(previous:String,incoming:String) -> bool:
 			return previous in ["wrong_window","watch_longer"]
 		"ward_face","ward_clear":
 			return previous in ["sleep_show","round_clear","ward_slip","wrong_window","brace_missed","wrong_bottle"]
+		"plate_ready","press_warn","press_shadow","press_caught","sill_wait","sill_missed","echo_hold","press_slam","tape_rewind":
+			return previous in ["seal_early","plate_ready","press_warn","press_shadow","press_caught","retry_gate",
+				"sill_wait","sill_missed","echo_hold","tape_rewind"]
 	return false
+
+static func press_state(story:Dictionary) -> String:
+	if story.get("step")!="play_two":
+		return ""
+	var visible := ""
+	for mark:Dictionary in story.get("marks",[]):
+		if mark.get("kind")=="press_shadow":
+			return "press_shadow"
+		if mark.get("kind")=="press_warn":
+			visible = "press_warn"
+	return visible
 
 func advance(seconds:float) -> void:
 	_remaining -= seconds

@@ -17,15 +17,14 @@ package soda.night
  *
  * NIGHT 7 room=signatures
  * check_signature: ledger(110,207) click. record_one / record_two: panel (78,218)/(260,186).
- * Click panel to start take_one/take_two; walk to plate (164,154)/(292,217), stand ~35 ticks,
- * click again anywhere to seal. Sampled positions replay literally, warp to panel for playback.
+ * Start the tape, stand on the plate (164,154)/(292,217) for 40 consecutive samples,
+ * then click while the seal_ready light is on. Replay returns the courier to the panel.
  * play_one/play_two: stand at gate (235,174)/(391,164) and cross to its right while echo on plate.
  * Walls block x>=gateX outside y+-18 or when closed. Gate2 has divider(329,175), blocked
  * between y=158..193, slow north route or fragile shortcut crumb(351,208) (40x32 pixels).
- * Echo OR player can wear through the shortcut. Click panel to retry. After entering gate2
- * the final sill stays shut until the recorded track ends on its plate. Then help_hold
- * lasts 10 ticks: the echo holds its plate so you can continue right across that sill
- * (410,164). If you stop, both gates close; re-record in same room. exit_signature touch exit(433,164).
+ * The second replay starts a warned roller from the left. A catch or broken tile
+ * rewinds the sealed tape. Inside the vestibule, hold east at the stripe to clear
+ * the final sill when the tape ends. A missed lift retries from the stripe.
  *
  * Night 8 lives in the independent SleepWatch domain.
  */
@@ -43,7 +42,7 @@ private[night] final case class Maintenance(stage: MaintenanceStep, live: Int, d
                                             reel: Vector[Frame]) extends PuzzleScene:
   def delayed: Frame = reel.head
 private[night] final case class Signatures(stage: SignatureStep, gate: Gate, frames: Vector[NightPoint],
-                                          wear: Int = 0) extends PuzzleScene:
+                                          wear: Int = 0, sillFrame: Int = 0) extends PuzzleScene:
   def echo(age: Int): NightPoint = frames.lift(age).orElse(frames.lastOption).getOrElse(gate.panel)
 private[night] final case class SleepRoom(watch: SleepWatch) extends PuzzleScene
 final case class PuzzleWorld private[night](private[night] val scene: PuzzleScene, age: Int, elapsed: Int,
@@ -61,6 +60,11 @@ object StoryPuzzles:
   private val crumb = NightPoint(351,208)
   private val divider = NightPoint(329,175)
   private val secondSill = NightPoint(410,164)
+  private val standHere = NightPoint(401,164)
+  private val plateHoldTicks = 40
+  private val liftTicks = 24
+  private val pressWarningTicks = 32
+  private val upperRoute = Vector(NightPoint(260,186),NightPoint(299,150),NightPoint(351,150),NightPoint(381,164))
   private val signExit = NightPoint(433,164)
   private val slots = Vector(104,240,376)
 
@@ -92,8 +96,9 @@ object StoryPuzzles:
     case m: Maintenance if m.stage == MaintenanceStep.Delay =>
       val delayedNext = m.reel.lift(1).getOrElse(m.delayed)
       barrier(w.player,next,delayGate,near(delayedNext.at,delayPlate,15))
-    case g: Signatures if g.stage == SignatureStep.Sill => barrier(w.player,next,secondSill,open=false)
-    case g: Signatures if g.stage == SignatureStep.Assist => barrier(w.player,next,secondSill,open=true)
+    case g: Signatures if g.stage == SignatureStep.Sill || g.stage == SignatureStep.Assist =>
+      val inside = NightPoint(next.x.max(g.gate.door.x),next.y.max(secondSill.y-17).min(secondSill.y+17))
+      barrier(w.player,inside,secondSill,open=g.stage == SignatureStep.Assist)
     case g: Signatures if g.stage == SignatureStep.Record || g.stage == SignatureStep.Playback =>
       val inDivider = g.gate == Gate.Second && math.abs(next.x-divider.x) < 5 && next.y > 158 && next.y < 193
       val guided =
@@ -134,8 +139,15 @@ object StoryPuzzles:
       case _ => stays(base)
 
   private def onCrumb(p: NightPoint): Boolean = math.abs(p.x-crumb.x) <= 20 && math.abs(p.y-crumb.y) <= 16
-  private def resetGate(s: PuzzleWorld,g: Signatures): PuzzleTransition =
-    at(s.enter(Signatures(SignatureStep.Ready,g.gate,Vector.empty),"retry_gate"),g.gate.panel)
+  private def plateTicks(g: Signatures): Int =
+    g.frames.reverseIterator.take(plateHoldTicks).takeWhile(near(_,g.gate.plate,16)).length
+
+  // This is the physical left-to-right edge of the press; the client draws the same edge.
+  private def pressFront(age: Int): Double =
+    (238 + (age - pressWarningTicks).max(0) * 2.8).min(Gate.Second.door.x)
+
+  private def replay(s: PuzzleWorld,g: Signatures,signal: StoryCue): PuzzleTransition =
+    at(s.enter(g.copy(stage=SignatureStep.Playback,wear=0,sillFrame=0),signal),g.gate.panel)
 
   private def signatures(w: NightWorld,s: PuzzleWorld,g: Signatures,in: NightInput): PuzzleTransition =
     import SignatureStep.*
@@ -145,30 +157,33 @@ object StoryPuzzles:
       case Ready if click(in) && near(w.player,g.gate.panel) =>
         stays(s.enter(g.copy(stage=Record,frames=Vector(w.player),wear=0),"record_start"))
       case Record =>
-        val frames = g.frames :+ w.player
-        if click(in) || frames.length >= 180 then
-          if frames.length < 10 || !frames.exists(p => near(p,g.gate.plate,16)) then resetGate(s,g)
-          else at(s.enter(g.copy(stage=Playback,frames=frames,wear=0),"replay_start"),g.gate.panel)
-        else stays(s.copy(scene=g.copy(frames=frames)))
+        val recorded = g.copy(frames=(g.frames :+ w.player).takeRight(180))
+        val held = plateTicks(recorded)
+        val base = s.copy(scene=recorded)
+        if in.action == NightAction.Toss && held == plateHoldTicks then replay(base,recorded,"replay_start")
+        else if in.action == NightAction.Toss then stays(base.tell("seal_early"))
+        else if held == plateHoldTicks && plateTicks(g) < held then stays(base.tell("plate_ready"))
+        else stays(base)
       case Playback =>
         val strain = g.gate == Gate.Second && (onCrumb(w.player) || onCrumb(g.echo(s.age)))
         val wear = (g.wear + (if strain then 1 else 0)).min(8)
-        if click(in) && near(w.player,g.gate.panel) || s.age >= g.frames.length + 1 ||
-            (wear >= 8 && onCrumb(w.player)) then resetGate(s,g)
+        if g.gate == Gate.Second && s.age >= pressWarningTicks && w.player.x <= pressFront(s.age) then
+          replay(s,g,"press_caught")
+        else if wear >= 8 && onCrumb(w.player) then replay(s,g,"tape_rewind")
         else if w.player.x >= g.gate.door.x && math.abs(w.player.y-g.gate.door.y)<=18 then
           if g.gate == Gate.First then
             at(s.enter(Signatures(Ready,Gate.Second,Vector.empty),"gate_pass"),Gate.Second.panel)
-          else stays(s.copy(scene=g.copy(stage=Sill,wear=wear)))
+          else stays(s.enter(g.copy(stage=Sill,wear=wear,sillFrame=s.age.min(g.frames.length)),"sill_wait"))
         else stays(s.copy(scene=g.copy(wear=wear)))
-      case Sill if s.age >= g.frames.length =>
-        if g.frames.lastOption.exists(near(_,g.gate.plate,16)) then stays(s.enter(g.copy(stage=Assist),"echo_hold"))
-        else resetGate(s,g)
+      case Sill if s.age >= 20 && g.sillFrame + s.age >= g.frames.length =>
+        stays(s.enter(g.copy(stage=Assist),"echo_hold"))
       case Assist if w.player.x >= secondSill.x && math.abs(w.player.y-secondSill.y)<=18 =>
-        if s.age >= 10 then stays(s.enter(g.copy(stage=Exit),"gate_pass"))
-        else stays(s.copy(scene=g.copy(stage=Crossed)))
-      case Crossed if s.age >= 10 => stays(s.enter(g.copy(stage=Exit),"gate_pass"))
-      case Assist if s.age >= 10 => resetGate(s,g)
-      case Exit if near(w.player,signExit) => PuzzleTransition.Finish(s)
+        stays(s.enter(g.copy(stage=Crossed),"press_slam"))
+      case Crossed if s.age >= 9 => stays(s.copy(scene=g.copy(stage=Exit),age=0))
+      case Assist if s.age >= liftTicks =>
+        at(s.enter(g.copy(stage=Sill,sillFrame=g.frames.length),"sill_missed"),standHere)
+      case Exit if near(w.player,signExit) || (w.player.x>=signExit.x && math.abs(w.player.y-signExit.y)<=18) =>
+        PuzzleTransition.Finish(s)
       case _ => stays(s)
 
   private val trainingTape = Vector(NightPoint(240,220),NightPoint(240,202),NightPoint(236,181),
@@ -217,17 +232,30 @@ object StoryPuzzles:
             mark(door,if onPlate && !latched then "gate_open" else "gate")) ++ route
         g.stage match
           case Ledger => output("check_signature",room,"你还没签收，台账上已有你的签名。到签收台点击查账。",Vector.empty,Vector(mark(ledger,"ledger")))
-          case Ready => output("record_"+n,room,"走到录制台，点击开始。记下从这里走到踏板、再停留两秒的路线。",Vector.empty,layout(false),tiles)
-          case Record => output("take_"+n,room,"正在录你。踏上黄板，停两秒，再点击封存；等回放时自己去过门。",Vector.empty,layout(false),tiles)
+          case Ready => output("record_"+n,room,"靠近录制台，点左键开录。走到踏板上站满两秒，等灯亮再点左键。",Vector.empty,layout(false),tiles)
+          case Record =>
+            val held = plateTicks(g)
+            val ready = held == plateHoldTicks
+            val hint = if ready then "脚别离开踏板。现在点左键封存。回放开始后，去右边过门。"
+              else if held > 0 then "站住，等踏板上的格子填满。亮起「可封存」再点左键。"
+              else "走到标着「踏板」的方板上，站稳两秒。"
+            val lamp = Option.when(ready)(mark(g.gate.plate,"seal_ready")).toVector
+            output("take_"+n,room,hint,Vector.empty,layout(held>0) ++ lamp,tiles).copy(plateTicks=Some(held))
           case Playback =>
             val e = g.echo(s.age)
-            output("play_"+n,room,if g.gate==Gate.First then "分身正在重走。等它踩亮踏板，向右穿门；回录制台可重录。" else "分身踩板时过门。上侧绕过隔柱；下侧裂砖很脆。门后继续向右！",
-              Vector(person(e,"echo")),layout(near(e,g.gate.plate,16)),tiles)
+            val danger = if g.gate == Gate.First then Vector.empty else
+              upperRoute.map(mark(_,"route_arrow")) :+ mark(NightPoint(pressFront(s.age),164),
+                if s.age < pressWarningTicks then "press_warn" else "press_shadow")
+            val hint = if g.gate==Gate.First then "录像里的奶龙会踩板开门。你本人往右走，穿过亮起的门缝。"
+              else "滚轮从左边追来！沿地面箭头从上方绕柱，往右穿过亮门。"
+            output("play_"+n,room,hint,Vector(person(e,"echo")),layout(near(e,g.gate.plate,16)) ++ danger,tiles)
           case Sill =>
-            val e = g.echo(s.age)
-            output("play_two",room,"第一道闸通过。末闸前继续往右跑，等录像走到最后一帧！",
-              Vector(person(e,"echo")),layout(near(e,g.gate.plate,16),secondSill,latched=true),tiles)
-          case Assist | Crossed => output("help_hold",room,"录像已经停了，它却多踩了半秒。现在继续向右冲过第二道闸！",
-            Vector(person(g.gate.plate,"echo")),layout(true,secondSill),tiles)
+            val e = g.echo(g.sillFrame+s.age)
+            output("sill_wait",room,"到门前白线，按住 D 或 →，关门时也按住。门一抬就能冲过去。",
+              Vector(person(e,"echo")),layout(true,secondSill,latched=true) :+ mark(standHere,"stand_here"),tiles)
+          case Assist => output("help_hold",room,"门抬起来了！按住 D 或 → 穿过去。",Vector(person(g.gate.plate,"echo")),
+            layout(true,secondSill) :+ mark(standHere,"stand_here"),tiles)
+          case Crossed => output("sill_clear",room,"闸落在身后了。沿着这条通道继续向右走。",
+            Vector(person(g.gate.plate,"echo")),Vector(mark(secondSill,"gate"),mark(signExit,"exit")))
           case Exit => output("exit_signature",room,"它替你按住了最后一格。向东离开签收廊。",Vector(person(g.gate.plate,"echo")),Vector(mark(signExit,"exit")))
       case SleepRoom(h) => SleepWatch.view(w,s,h)

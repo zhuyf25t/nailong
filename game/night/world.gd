@@ -363,11 +363,14 @@ func _draw_puzzle(s: Dictionary, phase: String) -> void:
 	var people: Array = s.get("people", []).duplicate()
 	people.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.y < b.y)
 	var player_drawn := false
+	var echo_feet := Vector2.INF
 	for person: Dictionary in people:
 		var key := _resolved_key(person)
 		var goal: Vector2 = _people_to[key]
 		var start: Vector2 = _people_from[key]
 		var at := start.lerp(goal, _blend())
+		if person.kind == "echo":
+			echo_feet = at
 		if at.y > p.y and not player_drawn:
 			story_player(p, _facing, frame, s)
 			player_drawn = true
@@ -390,6 +393,8 @@ func _draw_puzzle(s: Dictionary, phase: String) -> void:
 		dots(p + axis * 14, p + axis * 23, Color(PAPER, 0.6), 4)
 		_brackets(_aim.round(), 4, 4, Color(PAPER, 0.8))
 	story_front(s, _clock - _cue_at)
+	if s.get("room") == "signatures" and echo_feet.is_finite():
+		signature_identity_tags(p, echo_feet, s)
 
 func _update_echo() -> void:
 	var order := int(view["order"])

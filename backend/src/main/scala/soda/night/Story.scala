@@ -23,13 +23,14 @@ final case class StoryMark(x: Int,y: Int,kind: String)
 final case class StoryView(step: String,room: String,objective: String,cue: String,cueId: Int,
                            tiles: Vector[StoryTile],people: Vector[StoryPerson],marks: Vector[StoryMark],
                            stageTick: Int,round: Int = 0,sleepTicks: Int = 0,sleepMax: Int = 0,
-                           braceTicks: Int = 0,braceMax: Int = 0):
+                           braceTicks: Int = 0,braceMax: Int = 0,plateTicks: Option[Int] = None):
   def json: Json = Json.obj("step" -> step.asJson,"room" -> room.asJson,"objective" -> objective.asJson,
     "cue" -> cue.asJson,"cueId" -> cueId.asJson,"stageTick" -> stageTick.asJson,"round" -> round.asJson,
     "sleepTicks" -> sleepTicks.asJson,"sleepMax" -> sleepMax.asJson,"braceTicks" -> braceTicks.asJson,"braceMax" -> braceMax.asJson,
     "tiles" -> Json.fromValues(tiles.map(t => Json.obj("x" -> t.x.asJson,"y" -> t.y.asJson,"state" -> t.state.wire.asJson,"ticks" -> t.ticks.asJson))),
     "people" -> Json.fromValues(people.map(p => Json.obj("x" -> p.x.asJson,"y" -> p.y.asJson,"kind" -> p.kind.asJson,"slot" -> p.slot.asJson))),
     "marks" -> Json.fromValues(marks.map(m => Json.obj("x" -> m.x.asJson,"y" -> m.y.asJson,"kind" -> m.kind.asJson))))
+    .deepMerge(plateTicks.fold(Json.obj())(value => Json.obj("plateTicks" -> value.asJson)))
 
 enum PuzzleTransition:
   case Continue(state: PuzzleWorld,reposition: Option[NightPoint] = None)

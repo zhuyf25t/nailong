@@ -426,12 +426,185 @@ func _record_lead(s: Dictionary) -> void:
 	dots(plate_at + Vector2(15, 1), elbow, metal, 4)
 	dots(elbow, gate_at - Vector2(10, 0), metal, 4)
 
+func _floor_arrow(at: Vector2, axis: Vector2, ink: Color) -> void:
+	var normal := Vector2(-axis.y, axis.x)
+	var tip := at + 3 * axis
+	for flank: int in [-1, 1]:
+		var wing := at - 2 * axis + 3 * flank * normal
+		line_px(wing, tip, TAR, 4)
+		line_px(wing, tip, ink, 2)
+
+func _signature_route(points: PackedVector2Array, gate_at: Vector2, time: float) -> void:
+	if points.is_empty():
+		return
+	if gate_at != Vector2.ZERO and gate_at.distance_to(points[-1]) > 2:
+		points.append(gate_at)
+	var offset := fmod(time * 13.0, 15.0)
+	for i in range(1, points.size()):
+		var a := points[i - 1]
+		var b := points[i]
+		var axis := a.direction_to(b)
+		var distance := a.distance_to(b)
+		line_px(a, b, Color(TAR, 0.64), 3)
+		dots(a, b, Color(PAPER, 0.72), 4)
+		var d := offset
+		while d < distance - 2:
+			_floor_arrow(a + axis * d, axis, PAPER)
+			d += 15.0
+		if distance >= 6:
+			_floor_arrow(b - axis * 3, axis, PAPER)
+
+func _press_carriage(p: Vector2, warned: bool, time: float) -> void:
+	# The right lip is exactly the front reported by the server. All the mass
+	# and ink extend backwards, so the approaching contact point stays visible.
+	var x := roundi(p.x)
+	var top := 98
+	var bottom := 268
+	if warned:
+		for y in range(top, bottom, 10):
+			box(x - 2, y, 2, 6, BLOOD)
+			line_px(Vector2(x - 9, y + 5), Vector2(x - 5, y + 2), DRIED, 2)
+		_stamp(Vector2(x - 15, top + 10), "压辊预热", FRESH)
+		return
+	box(x - 42, top, 41, bottom - top, Color("#401e2447"))
+	for y in range(top + 13, bottom - 7, 28):
+		box(x - 47, y + 1, 26, 1, DRIED)
+		box(x - 36, y + 3, 20, 2, BLOOD)
+		box(x - 53, y + 6, 19, 1, DRIED)
+	box(x - 24, top + 2, 24, bottom - top - 2, TAR)
+	box(x - 21, top + 6, 18, bottom - top - 12, Color("#59252d"))
+	box(x - 18, top + 6, 9, bottom - top - 12, BLOOD)
+	box(x - 15, top + 9, 3, bottom - top - 19, Color("#e36a62"))
+	var phase := posmod(floori(time * 12), 13)
+	for y in range(top + 12 + phase, bottom - 13, 13):
+		line_px(Vector2(x - 20, y + 3), Vector2(x - 6, y - 2), SOOT, 3)
+	for y in [top, bottom - 10]:
+		_panel(x - 26, y, 27, 12, SOOT, ASH)
+		_wheel(Vector2(x - 14, y + 6), 6, PAPER, DRIED, time * 3.2)
+	box(x - 2, top + 12, 2, bottom - top - 22, PAPER)
+	box(x, top + 14, 1, bottom - top - 26, FRESH)
+	_stamp(Vector2(x - 15, top - 3), "压印辊", FRESH)
+
+func _signature_mechanisms(s: Dictionary, time: float) -> void:
+	var route := PackedVector2Array()
+	var gate_at := Vector2.ZERO
+	for mark: Dictionary in s.get("marks", []):
+		var p := Vector2(mark.x, mark.y)
+		match String(mark.kind):
+			"route_arrow":
+				route.append(p)
+			"gate", "gate_open":
+				gate_at = p
+			"press_warn", "press_shadow":
+				_press_carriage(p, mark.kind == "press_warn", time)
+	_signature_route(route, gate_at, time)
+
+func _sill_sign(anchor: Vector2, words: String, tint: Color) -> void:
+	var width := ceili(_stamp_font.get_string_size(words, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x) + 28
+	var left := clampi(roundi(anchor.x - width / 2.0), 3, 477 - width)
+	var y := roundi(anchor.y + 35)
+	line_px(anchor + Vector2(2, 13), Vector2(anchor.x + 2, y - 9), TAR, 3)
+	line_px(anchor + Vector2(2, 13), Vector2(anchor.x + 2, y - 9), tint)
+	box(left, y - 10, width, 17, TAR)
+	box(left, y - 10, width, 2, tint)
+	draw_string(_stamp_font, Vector2(left + 5, y + 2), words, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, PAPER)
+	_floor_arrow(Vector2(left + width - 11, y - 2), Vector2.RIGHT, tint)
+
+func _signature_last_press(s: Dictionary, gate_at: Vector2, exit_at: Vector2) -> void:
+	var step := String(s.step)
+	var ticks := int(s.get("stageTick", 0))
+	# While the gap is open the main press spits out a sheet carrying the echo's
+	# palm. The paper tears free when the shutter falls behind the player.
+	var extension := clampi(ticks * 3 + 5, 5, 34) if step == "help_hold" else 34
+	var torn := step != "help_hold"
+	var sheet_y := 73 + (4 if torn else 0)
+	box(213, sheet_y, 54, extension, TAR)
+	box(215, sheet_y, 50, extension - 1, PAPER)
+	box(217, sheet_y, 2, extension - 1, DRIED)
+	for i in range(3):
+		var row := 5 + i * 4
+		if row < extension - 2:
+			box(221, sheet_y + row, 8 + i * 4, 1, TAR)
+	if extension > 19:
+		_decal("palm_mark", 0, 1, Rect2(237, sheet_y + extension - 19, 22, 19))
+	if torn:
+		_picket(214, sheet_y - 5, 52, 8, 4, PAPER)
+		_picket(215, sheet_y, 50, 8, 3, TAR)
+	if step == "sill_clear" and gate_at != Vector2.ZERO:
+		var hit := clampf(ticks / 9.0, 0, 1)
+		var p := gate_at.round()
+		box(p.x - 2, p.y - 15, 5, 31, DRIED)
+		for i in range(6):
+			var scatter := p + Vector2(-3 - (4 + i * 2) * hit, (i - 3) * 3 + 9 * hit * hit)
+			box(scatter.x, scatter.y, 3, 2, BLOOD)
+		line_px(p - Vector2(2, 13), p + Vector2(-2, 13), PAPER)
+	if exit_at != Vector2.ZERO:
+		for dx in [-18, -10]:
+			_floor_arrow(exit_at + Vector2(dx, 0), Vector2.RIGHT, PAPER)
+
+func _signature_front(s: Dictionary, cue_age: float) -> void:
+	var step := String(s.step)
+	var gate_at := Vector2.ZERO
+	var exit_at := Vector2.ZERO
+	var wait_at := Vector2.ZERO
+	var plate_at := Vector2.ZERO
+	var sealed := false
+	var filling := false
+	for mark: Dictionary in s.get("marks", []):
+		var p := Vector2(mark.x, mark.y)
+		match String(mark.kind):
+			"gate", "gate_open":
+				gate_at = p
+			"exit":
+				exit_at = p
+			"stand_here":
+				wait_at = p
+			"record_fill":
+				plate_at = p
+				filling = true
+			"seal_ready":
+				plate_at = p
+				sealed = true
+			"plate":
+				if step.begins_with("take"):
+					plate_at = p
+			"plate_on":
+				if step.begins_with("take"):
+					plate_at = p
+					filling = true
+	if plate_at != Vector2.ZERO and step.begins_with("take"):
+		var ticks := 40 if sealed else clampi(int(s.get("plateTicks", 0)), 0, 40)
+		var caption := "踩住踏板 · 2 秒"
+		if filling:
+			caption = "录制 %.1f / 2.0 秒" % (ticks / 20.0)
+		if sealed:
+			caption = "已录满 · 点击封存"
+		_stamp(plate_at + Vector2(0, 19), caption, PAPER)
+		box(plate_at.x - 20, plate_at.y + 23, 40, 5, TAR)
+		box(plate_at.x - 19, plate_at.y + 24, 38 * ticks / 40.0, 3, PAPER)
+		for i in range(1, 4):
+			box(plate_at.x - 20 + i * 10, plate_at.y + 24, 1, 3, SOOT)
+	if step in ["help_hold", "sill_clear", "exit_signature"]:
+		_signature_last_press(s, gate_at, exit_at)
+	if step == "sill_wait" and wait_at != Vector2.ZERO:
+		_sill_sign(wait_at, "站在框内　按住 D", PAPER)
+	elif step == "help_hold" and gate_at != Vector2.ZERO:
+		_sill_sign(gate_at, "闸已开　按住 D", FRESH)
+	elif step in ["sill_clear", "exit_signature"] and exit_at != Vector2.ZERO:
+		_sill_sign(exit_at, "向右冲进出口", PAPER)
+	if step == "play_two" and cue_age < 1.4 and s.get("cue") in ["press_caught", "tape_rewind"]:
+		_stamp(Vector2(79, 115), "压辊撞上 · 录像倒带" if s.cue == "press_caught" else "裂砖塌落 · 录像倒带", FRESH)
+		for dx in [20, 27]:
+			_floor_arrow(Vector2(dx, 111), Vector2.LEFT, PAPER)
+
 func story_props(s: Dictionary, t: float) -> void:
 	var printed := is_printed(s)
 	var room := String(s.get("room", "factory"))
 	var step := String(s.get("step", ""))
 	var edge := PAPER if printed else (FROST if room == "maintenance" else WARM)
 	_record_lead(s)
+	if room == "signatures":
+		_signature_mechanisms(s, t)
 	for m: Dictionary in s.get("marks", []):
 		var p := Vector2(m.x, m.y)
 		var kind := String(m.kind)
@@ -487,9 +660,22 @@ func story_props(s: Dictionary, t: float) -> void:
 				_stamp(p + Vector2(0, 19), "观测 0%d" % (idx + 1), edge)
 			"plate", "plate_on":
 				_plate(p, kind == "plate_on", edge)
-				_stamp(p + Vector2(0, 19), "压下" if kind == "plate_on" else "踏板", edge)
+				if not step.begins_with("take"):
+					_stamp(p + Vector2(0, 19), "已压下" if kind == "plate_on" else "踏板", edge)
+			"stand_here":
+				if step == "sill_wait":
+					box(p.x - 13, p.y - 7, 26, 14, Color("#2725247d"))
+					_brackets(p, 14, 8, PAPER)
+					for dy in [-3, 3]:
+						box(p.x - 7, p.y + dy, 5, 2, PAPER)
+						box(p.x - 1, p.y + dy, 2, 2, PAPER)
+				_floor_arrow(p + Vector2(7, 0), Vector2.RIGHT, PAPER)
 			"gate", "gate_open":
 				_gate(p, kind == "gate_open", edge, absf(p.x - 410) < 3)
+				if kind == "gate_open" and step == "help_hold":
+					for dx in [4, 13, 22]:
+						_floor_arrow(p + Vector2(dx, 0), Vector2.RIGHT, PAPER)
+					_brackets(p, 13, 13, FRESH)
 			"old_tape", "ledger", "panel":
 				_console(p, kind != "ledger", step.begins_with("take"), edge)
 				var legend := "旧录像" if kind == "old_tape" else ("签名" if kind == "ledger" else "录制台")
@@ -503,12 +689,16 @@ func story_props(s: Dictionary, t: float) -> void:
 			"exit":
 				_exit_prop(p, edge)
 				_stamp(p + Vector2(0, 18), "出口", edge)
-	if room == "signatures" and (step.ends_with("two") or step in ["help_hold", "exit_signature"]):
+	if room == "signatures" and (step.ends_with("two") or step in ["sill_wait", "help_hold", "sill_clear", "exit_signature"]):
 		# The slit looks into the adjacent shop. Its workers are behind the glass.
 		_panel(398, 95, 79, 46, TAR, ASH)
 		_decal("woodcut_screen", 0, 1, Rect2(399, 99, 77, 37))
 		box(399, 134, 77, 3, TAR)
-		_stamp(Vector2(438, 146), "旁车间", ASH)
+		if step in ["help_hold", "sill_clear", "exit_signature"]:
+			_decal("torn_hand", 2, 3, Rect2(412, 100, 18, 36))
+			_decal("palm_mark", 0, 1, Rect2(448, 102, 24, 22))
+		else:
+			_stamp(Vector2(438, 146), "旁车间", ASH)
 	if room == "signatures" and step.begins_with("take"):
 		box(15, 107, 4, 4, FRESH)
 		_stamp(Vector2(42, 112), "录制中", PAPER)
@@ -529,6 +719,75 @@ func story_player(p: Vector2, row: int, frame: int, s: Dictionary) -> void:
 		var wrist := p + Vector2(-7 if row == 3 else 7, -1)
 		box(wrist.x, wrist.y, 3, 4, DRIED)
 		box(wrist.x + 1, wrist.y + 3, 1, 4, BLOOD)
+
+func _badge_space(feet: Vector2, badge_size: Vector2, side: float,
+		separate: bool, reserved: Array[Rect2]) -> Rect2:
+	var alternate := side * (badge_size.x * 0.5 + 7)
+	var positions := [
+		Vector2(alternate if separate else 0.0, -40),
+		Vector2(alternate, -44), Vector2(-alternate, -45),
+		Vector2(side * 27, -55), Vector2(-side * 27, -55),
+		Vector2(side * 32, -24), Vector2(-side * 32, -24)]
+	var best := Rect2()
+	var least_overlap := INF
+	for offset: Vector2 in positions:
+		var top_left := (feet + offset - Vector2(badge_size.x * 0.5, 0)).round()
+		var bounds := Rect2(top_left.clamp(Vector2.ONE, WORLD - badge_size - Vector2.ONE), badge_size)
+		var overlaps := 0.0
+		for block: Rect2 in reserved:
+			overlaps += bounds.intersection(block).get_area()
+		if overlaps < least_overlap:
+			best = bounds
+			least_overlap = overlaps
+		if is_zero_approx(overlaps):
+			break
+	return best
+
+func signature_identity_tags(player: Vector2, echo: Vector2, s: Dictionary) -> void:
+	# Keep the two labels legible when both recordings occupy the very same pixel.
+	# These are interpolated sprite anchors, so the leader follows its own figure.
+	var reserved: Array[Rect2] = [
+		Rect2(player - Vector2(12, 24), Vector2(24, 33)),
+		Rect2(echo - Vector2(12, 24), Vector2(24, 33))]
+	for mark: Dictionary in s.marks:
+		var at := Vector2(mark.x, mark.y)
+		match String(mark.kind):
+			"gate", "gate_open":
+				reserved.append(Rect2(at - Vector2(10, 18), Vector2(20, 36)))
+				if s.step == "help_hold":
+					reserved.append(Rect2(at + Vector2(-62, 24), Vector2(124, 20)))
+			"stand_here", "exit":
+				reserved.append(Rect2(at + Vector2(-62, 24), Vector2(124, 20)))
+			"plate", "plate_on", "panel":
+				reserved.append(Rect2(at + Vector2(-21, 10), Vector2(42, 17)))
+	var close := absf(player.x - echo.x) < 36 and absf(player.y - echo.y) < 35
+	var side := -1.0 if player.x <= echo.x else 1.0
+	var you := _badge_space(player, Vector2(19, 13), side, close, reserved)
+	reserved.append(you.grow(2))
+	var tape := _badge_space(echo, Vector2(35, 13), -side, close, reserved)
+	var white := Color("#fff9e8")
+	var film := Color("#efbe94")
+	for endpoints: Array in [[you, player, white], [tape, echo, film]]:
+		var bounds: Rect2 = endpoints[0]
+		var feet: Vector2 = endpoints[1]
+		var tint: Color = endpoints[2]
+		var from := Vector2(clampf(feet.x, bounds.position.x + 3, bounds.end.x - 3), bounds.end.y - 1)
+		line_px(from, feet - Vector2(0, 23), TAR, 3)
+		line_px(from, feet - Vector2(0, 23), tint)
+	# The player's tag is an ivory pointer. The echo's is a strip of black film.
+	var a := you.position
+	box(a.x, a.y, you.size.x, you.size.y, TAR)
+	box(a.x + 1, a.y + 1, you.size.x - 2, you.size.y - 2, white)
+	draw_string(_stamp_font, a + Vector2(0,10), "你", HORIZONTAL_ALIGNMENT_CENTER, you.size.x, 10, TAR)
+	var b := tape.position
+	box(b.x, b.y, tape.size.x, tape.size.y, TAR)
+	for dx in [1, 30]:
+		for dy in [2, 8]:
+			box(b.x + dx, b.y + dy, 3, 2, film)
+	draw_string(_stamp_font, b + Vector2(5,10), "录像", HORIZONTAL_ALIGNMENT_CENTER, 25, 9, film)
+	var tip := player.round() + Vector2(0, 5)
+	draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-5,6), tip + Vector2(5,6)]), TAR)
+	draw_colored_polygon(PackedVector2Array([tip + Vector2(0,1), tip + Vector2(-3,5), tip + Vector2(3,5)]), white)
 
 func is_rotating_window(kind: String) -> bool:
 	return kind in ["sleep_frog", "sleep_decoy", "sleep_shutter", "wake_window", "wake_look", "ward_face"]
@@ -679,6 +938,9 @@ func _lunge_cutout(at: Vector2, width: float, rotation_angle: float, frame: int,
 	draw_polygon(quad, PackedColorArray([Color.WHITE]), uv, image)
 
 func story_front(s: Dictionary, cue_age: float) -> void:
+	if s.get("room") == "signatures":
+		_signature_front(s, cue_age)
+		return
 	if s.get("room") != "sleepward":
 		return
 	var step := String(s.get("step", ""))

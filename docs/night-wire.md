@@ -1,6 +1,6 @@
 # 夜班契约 · 守夜版
 
-项目根是 hw3，Godot 为 game/，运行时 HTTP 与 PostgreSQL 默认使用本机 8738、55439。GET /health 返回 {"status":"ok","game":"nightshift","rulesPause":true,"storyCampaign":2}。POST /v1/sessions 沿用 {name,password} → {token,name}。以下均使用 Authorization: Bearer。
+项目根是 hw3，Godot 为 game/，运行时 HTTP 与 PostgreSQL 默认使用本机 8738、55439。GET /health 返回 {"status":"ok","game":"nightshift","rulesPause":true,"storyCampaign":3}。POST /v1/sessions 沿用 {name,password} → {token,name}。以下均使用 Authorization: Bearer。
 
 - GET /v1/night/profile → {"unlocked":1,"cleared":[],"bestClean":0}。cleared 是已完成的夜班号数组，bestClean 是同一关最多无误投递数（0–3）。
 - POST /v1/night/start，正文 {"night":1,"requestId":"UUID"}，返回下面的快照。新开同一玩家的比赛替换旧比赛，重复 requestId 幂等。锁关 409。
@@ -30,7 +30,10 @@ escaping 阶段 `chase` 是追赶者的实际位置 `{x,y}`，范围为 x=16..46
 | tiles | 地砖中心坐标、solid/warn/hole/mend 及状态剩余 tick |
 | people | 画面中可见者的坐标、kind 与展示槽位。睡蛙闭帘时四个窗体外观相同，通过连续坐标追踪 |
 | marks | 录制台、踏板、稳机等公开交互位置 |
+| plateTicks | 第七夜录制时返回 0–40，表示持续站在板上的 tick 数。累计 40 时出现 seal_ready，可点左键封存 |
 | round、sleepTicks、sleepMax | 守夜轮数和本轮睡眠环，计时单位为 tick |
 | braceTicks、braceMax | 这次扶稳装置已连续按住及需要的 tick |
+
+第二段回放用 `route_arrow` 标记上侧绕行路线。`press_warn` 预告压印滚轮，`press_shadow.x` 是实际会追到玩家的前沿。进入 `sill_wait` 后，`stand_here` 指向门前白线。`help_hold` 开门 24 tick，越过后显示 `sill_clear`，错过则从白线重试。撞上滚轮或踏穿裂砖会重新播放已经封存的同一段轨迹。
 
 首夜首次成功打卡时保存一段实际走位。第六夜服务端读取这段轨迹，与实时位置及两秒延迟的轨迹分别生成监控画面。第七夜回放当前录下的脚步并驱动实体门闩。第八夜按服务器轨迹移动四扇窗；玩家在看得见的响应出现后才能交付。通关进度与原工牌共用，旧档可以直接开始已解锁的夜班。

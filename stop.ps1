@@ -21,6 +21,8 @@ function Stop-LocalShift([int]$port, [string]$ownerDirectory) {
         Start-Sleep -Milliseconds 250
     }
 }
+$pressRuntime = Join-Path $runtime 'press-server'
+if (Test-Path -LiteralPath $pressRuntime) { Stop-LocalShift 8741 $pressRuntime }
 $otherRuntime = Join-Path $runtime 'story-server'
 if (Test-Path -LiteralPath $otherRuntime) { Stop-LocalShift 8740 $otherRuntime }
 Stop-LocalShift 8738 $runtime

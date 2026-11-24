@@ -30,7 +30,7 @@ function Read-NightHealth([string]$address) {
     } catch { return $null }
 }
 function Test-CampaignServer($health) {
-    return ($health.status -eq 'ok' -and $health.game -eq 'nightshift' -and $health.storyCampaign -eq 2)
+    return ($health.status -eq 'ok' -and $health.game -eq 'nightshift' -and $health.storyCampaign -eq 3)
 }
 
 # Serialize startup and import when multiple windows use the same service.
@@ -43,18 +43,27 @@ try {
     $serverRuntime = $runtime
     $health = Read-NightHealth $baseUrl
     if (-not $ConnectTo -and -not (Test-CampaignServer $health)) {
-        $otherUrl = 'http://127.0.0.1:8740'
-        $otherRuntime = Join-Path $runtime 'story-server'
-        $other = if (Test-Path -LiteralPath $otherRuntime) { Read-NightHealth $otherUrl }
-        if ((Test-CampaignServer $other) -or $health.game -eq 'nightshift') {
-            # An older window can finish its shift while the new game shares its saved progress.
-            $baseUrl = $otherUrl
-            $health = $other
-            $serverRuntime = (New-Item -ItemType Directory -Path $otherRuntime -Force).FullName
+        # Reuse a current server first, then choose a free port without interrupting a shift.
+        $free = if (-not $health) { 8738 }
+        $folders = @{ 8738 = $runtime; 8740 = (Join-Path $runtime 'story-server'); 8741 = (Join-Path $runtime 'press-server') }
+        foreach ($candidate in 8740,8741) {
+            $candidateUrl = "http://127.0.0.1:$candidate"
+            $other = Read-NightHealth $candidateUrl
+            if (Test-CampaignServer $other) {
+                $baseUrl = $candidateUrl
+                $health = $other
+                break
+            }
+            if (-not $free -and -not $other) { $free = $candidate }
+        }
+        if (-not (Test-CampaignServer $health)) {
+            if (-not $free) { throw 'All local Night Shift ports are occupied. Close the previous game then run stop.ps1.' }
+            $baseUrl = "http://127.0.0.1:$free"
+            $serverRuntime = (New-Item -ItemType Directory -Path $folders[$free] -Force).FullName
         }
     }
     if (-not (Test-CampaignServer $health)) {
-        if ($ConnectTo) { throw "This endpoint must run Night Shift story campaign v2: $baseUrl" }
+        if ($ConnectTo) { throw "This endpoint must run Night Shift story campaign v3: $baseUrl" }
         $stopFile = Join-Path $serverRuntime 'server.stop'
         $serverPidFile = Join-Path $serverRuntime 'launcher.pid'
         if (Test-Path -LiteralPath $stopFile) { Remove-Item -LiteralPath $stopFile }
@@ -109,7 +118,7 @@ $previousUrl = $env:SODA_API_URL
 $previousLocal = $env:NIGHT_LOCAL_ALTERNATE
 try {
     $env:SODA_API_URL = $baseUrl
-    $env:NIGHT_LOCAL_ALTERNATE = if (-not $ConnectTo -and $baseUrl -eq 'http://127.0.0.1:8740') { '1' } else { '0' }
+    $env:NIGHT_LOCAL_ALTERNATE = if (-not $ConnectTo -and $baseUrl -ne 'http://127.0.0.1:8738') { '1' } else { '0' }
     $process = Start-Process $Godot -ArgumentList $gameArgs -WorkingDirectory $project -PassThru -Wait
 } finally {
     $env:SODA_API_URL = $previousUrl

@@ -105,20 +105,97 @@ func _exit_room(kind: String) -> bool:
 
 func _record(ordinal: String) -> bool:
 	if not await _use_mark("panel", "take_" + ordinal): return false
-	if not await _near_mark("plate") or not await _ticks(52): return false
+	var plate: Dictionary = h._marker("plate")
+	if plate.is_empty(): return h._fail("the recording needs a visible pressure plate")
+	var at: Vector2 = h._point(plate)
+	if not await h._walk(at, 9, "stand on the recording plate"): return false
+	if ordinal == "one":
+		if not await _ticks(8): return false
+		_interact()
+		if not await h._until(func(): return h._story().get("cue") == "seal_early", 2, "early sealing explains the unfinished recording"): return false
+		if _step() != "take_one": return h._fail("an early click discarded or sealed the recording")
+		if not await h._walk(at + Vector2(0,32), 5, "step off the plate during recording"): return false
+		if int(h._story().get("plateTicks", -1)) != 0 or not h._marker("seal_ready").is_empty(): return h._fail("leaving the plate must break the continuous hold")
+		if not await h._walk(at, 9, "step back onto the recording plate"): return false
+	if not await h._until(func(): return not h._marker("seal_ready").is_empty(), 4, "wait for the visible two-second sealing prompt"): return false
+	if int(h._story().get("plateTicks",-1)) != 40: return h._fail("the sealing prompt arrived before the plate was ready")
+	if ordinal == "two": await h._capture("10a-seal-ready")
 	_interact()
 	return await _wait_step("play_" + ordinal)
+
+func _key(code: Key, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func _upper_aisle() -> bool:
+	# Standing still must let the moving press catch the courier. The machine
+	# rewinds the sealed tape, so the same route can be tried immediately.
+	if not await h._until(func(): return h._story().get("cue") == "press_caught", 5, "a stationary courier is caught by the press"): return false
+	if _step() != "play_two" or h._marker("route_arrow").is_empty(): return h._fail("being caught should replay the marked route without another recording")
+	var limit := Time.get_ticks_msec() + 12000
+	var segment := 0
+	var warned := false
+	var first_shadow := Vector2.INF
+	var moving_shadow := false
+	var held := KEY_NONE
+	var keys := [KEY_W, KEY_D, KEY_S, KEY_D]
+	while _step() == "play_two":
+		if Time.get_ticks_msec() >= limit: return h._fail("cross the marked upper aisle by ordinary WASD movement")
+		var pilot: Vector2 = h._position()
+		if segment == 0 and pilot.y <= 150: segment = 1
+		if segment == 1 and pilot.x >= 349: segment = 2
+		if segment == 2 and pilot.y >= 161: segment = 3
+		var key: Key = keys[segment]
+		if key != held:
+			if held != KEY_NONE: _key(held, false)
+			_key(key, true)
+			held = key
+		if not h._marker("press_warn").is_empty():
+			warned = true
+			await h._capture("10b-press-warning")
+		var shadow: Dictionary = h._marker("press_shadow")
+		if not shadow.is_empty():
+			if not warned: return h._fail("the press shadow reached the aisle without warning")
+			var at: Vector2 = h._point(shadow)
+			if not first_shadow.is_finite():
+				first_shadow = at
+			elif first_shadow.distance_to(at) >= 10:
+				moving_shadow = true
+				await h._capture("10-recorded-footsteps")
+		await h.process_frame
+	if held != KEY_NONE: _key(held, false)
+	if not warned or not moving_shadow or _step() != "sill_wait": return h._fail("the signposted chase must end at the last sill")
+	return true
+
+func _last_sill() -> bool:
+	var stand: Dictionary = h._marker("stand_here")
+	if stand.is_empty(): return h._fail("the last sill needs a visible waiting position")
+	if not await h._walk(h._point(stand), 6, "stand against the closed sill"): return false
+	await h._capture("10c-sill-wait")
+	if not await _wait_step("help_hold", 8): return false
+	await h._capture("10d-sill-open")
+	# Let the first opening close on purpose. The tape and the first gate must
+	# remain complete, so the player can hold D and retry here.
+	if not await _wait_step("sill_wait", 4): return false
+	stand = h._marker("stand_here")
+	if stand.is_empty() or h._position().distance_to(h._point(stand)) > 20: return h._fail("missed opening should return the player to the sill")
+	_key(KEY_D, true)
+	if not await _wait_step("help_hold", 8): return false
+	if not await _wait_step("exit_signature", 4): return false
+	_key(KEY_D, false)
+	print("Night 7 verified: two-second seal, caught by the press, replayed the tape along the upper aisle, missed one opening, held D through the next")
+	return true
 
 func signatures() -> bool:
 	if not await _wait_step("check_signature") or not await _use_mark("ledger", "record_one"): return false
 	if not await _record("one"): return false
 	if not await h._move_to(Vector2(254,174), func(): return _step() == "record_two", "cross the first gate alongside the recorded courier"): return false
 	if not await _record("two"): return false
-	if not await h._walk(Vector2(316,147), 5, "reach the upper aisle before the dividing wall"): return false
-	if not await h._walk(Vector2(346,147), 5, "pass the divider on the upper side"): return false
-	await h._capture("10-recorded-footsteps")
-	if not await h._move_to(Vector2(428,164), func(): return _step() == "help_hold", "cross the recorded second gate"): return false
-	if not await h._move_to(Vector2(433,164), func(): return _step() == "exit_signature", "cross the sill while the copy grants half a second"): return false
+	if not await _upper_aisle() or not await _last_sill(): return false
 	return await _exit_room("exit")
 
 func _actors(kind: String) -> Array:

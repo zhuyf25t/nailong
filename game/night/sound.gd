@@ -16,6 +16,10 @@ const STORY_FOLEY := {
 	"wrong_window":["tape_gate", 0.44], "delay_found":["tape_gate", 0.67],
 	"delay_open":["lever", 0.53], "archive_turn":["well_close", 0.84],
 	"ledger":["press_strike", 0.57], "record_start":["tape_gate", 0.58],
+	"seal_early":["blocked", 0.29], "plate_ready":["deliver", 0.39],
+	"press_warn":["wheel_left", 0.40], "press_shadow":["wheel_left", 0.57],
+	"press_caught":["press_strike", 0.84], "sill_wait":["latch", 0.47], "sill_missed":["press_strike", 0.77],
+	"press_slam":["press_strike", 0.91], "tape_rewind":["tape_gate", 0.67],
 	"replay_start":["press_strike", 0.64], "retry_gate":["blocked", 0.44],
 	"gate_pass":["lever", 0.55], "echo_hold":["hand_loan", 0.64],
 	"sleep_show":["glass_1", 0.30], "sleep_close":["shutter", 0.42],
@@ -34,6 +38,11 @@ var _radio: AudioStreamPlayer
 var _pursuit: AudioStreamPlayer
 var _space: AudioStreamPlayer
 var _story_voice: AudioStreamPlayer
+var _press_player: AudioStreamPlayer
+var _press_bus: StringName
+var _press_state := ""
+var _press_gain := 0.0
+var _press_pitch := 0.82
 var _voices: Array[AudioStreamPlayer] = []
 var _targets := Vector3.ZERO
 var _muted := false
@@ -69,6 +78,15 @@ func _ready() -> void:
 	_plant = _layer("plant")
 	_radio = _layer("radio")
 	_pursuit = _layer("pursuit")
+	_press_player = _layer("ink_roller")
+	var index := AudioServer.bus_count
+	AudioServer.add_bus()
+	_press_bus = StringName("StampPress_%d"%get_instance_id())
+	AudioServer.set_bus_name(index,_press_bus)
+	var pan := AudioEffectPanner.new()
+	pan.pan = -0.65
+	AudioServer.add_bus_effect(index,pan)
+	_press_player.bus = _press_bus
 	_space = AudioStreamPlayer.new()
 	_story_voice = AudioStreamPlayer.new()
 	add_child(_space)
@@ -82,6 +100,10 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_stop_all()
+	if _press_bus!=&"":
+		var index := AudioServer.get_bus_index(_press_bus)
+		if index>0:
+			AudioServer.remove_bus(index)
 
 
 func shutdown() -> void:
@@ -98,7 +120,7 @@ func shutdown() -> void:
 
 
 func _stop_all() -> void:
-	for player: AudioStreamPlayer in [_plant, _radio, _pursuit, _space, _story_voice]:
+	for player: AudioStreamPlayer in [_plant, _radio, _pursuit, _space, _story_voice, _press_player]:
 		if is_instance_valid(player):
 			player.stop()
 	for voice in _voices:
@@ -127,6 +149,9 @@ func _set_mix() -> void:
 	if _room == "signatures" and _step != "check_signature":
 		_targets = Vector3(0.09, 0.0, 0.0)
 		_space_gain = 0.0 if _step == "exit_signature" else 0.54
+		if _press_gain>0.0:
+			_space_gain = 0.15
+			_targets.z = 0.20 if _press_state=="press_shadow" else 0.05
 		if _step == "help_hold" or _quiet_until > _last_tick:
 			_targets = Vector3.ZERO
 			_space_gain = 0.0
@@ -170,6 +195,8 @@ func _process(delta: float) -> void:
 	_mix_layer(_plant, _targets.x, blend)
 	_mix_layer(_radio, _targets.y, blend)
 	_mix_layer(_pursuit, _targets.z, blend)
+	_mix_layer(_press_player, _press_gain, blend)
+	_press_player.pitch_scale = lerpf(_press_player.pitch_scale,_press_pitch,blend)
 	if _space.stream != null:
 		_mix_layer(_space, _space_gain, blend)
 	var radio_pitch := 0.93 if _dim and _phase == "serving" else 1.0
@@ -200,7 +227,7 @@ func _pause_mix(pause_now: bool) -> void:
 	if pause_now == _paused:
 		return
 	_paused = pause_now
-	for player: AudioStreamPlayer in [_plant, _radio, _pursuit, _space, _story_voice]:
+	for player: AudioStreamPlayer in [_plant, _radio, _pursuit, _space, _story_voice, _press_player]:
 		if is_instance_valid(player) and player.has_stream_playback():
 			player.stream_paused = pause_now
 	for player in _voices:
@@ -218,6 +245,9 @@ func _set_story_room(room: String) -> void:
 	_wheel_travel = 0.0
 	_wheel_sounded = -1000
 	_wheel_tick = -1
+	_press_state = ""
+	_press_gain = 0.0
+	_press_pitch = 0.82
 	_last_foley_tick.clear()
 	if _space == null:
 		return
@@ -270,10 +300,10 @@ func _story_cue(cue: String) -> void:
 	if _last_tick - _last_foley_tick.get(cue, -1000) < 12:
 		return
 	_last_foley_tick[cue] = _last_tick
-	if cue in ["echo_hold", "ward_face", "wake_chime"]:
+	if cue in ["echo_hold", "ward_face", "wake_chime", "press_caught", "sill_missed","press_slam"]:
 		_quiet_until = _last_tick + 16
 		_stop_all()
-	if cue in ["double_thanks", "saw_hand", "archive_turn", "echo_hold", "ward_face", "ward_clear"]:
+	if cue in ["double_thanks", "saw_hand", "archive_turn", "echo_hold", "ward_face", "ward_clear", "press_caught", "sill_missed","press_slam"]:
 		var foreground: Array = STORY_FOLEY[cue]
 		_story_voice.stream = _sounds[String(foreground[0])]
 		_story_voice.volume_linear = float(foreground[1])
@@ -313,12 +343,37 @@ func _listen_to_wheels(people: Array) -> void:
 	_wheel_tick = _last_tick
 
 
-func _sync_story(story: Dictionary, fresh: bool, previous_phase: String) -> void:
+func _listen_to_press(story:Dictionary,player:Dictionary) -> void:
+	var kind := ""
+	var closing := 0.0
+	if _step=="play_two":
+		for mark:Dictionary in story.get("marks",[]):
+			if mark.get("kind")=="press_shadow":
+				kind = "press_shadow"
+				var gap := absf(float(player.get("x",240))-float(mark.get("x",0)))
+				closing = 1.0-clampf(gap/150.0,0.0,1.0)
+				break
+			if mark.get("kind")=="press_warn":
+				kind = "press_warn"
+	if kind!=_press_state and not kind.is_empty():
+		_story_cue(kind)
+	_press_state = kind
+	_press_gain = 0.0
+	_press_pitch = 0.82
+	if kind=="press_warn":
+		_press_gain = 0.24
+	elif kind=="press_shadow":
+		_press_gain = lerpf(0.38,0.82,closing)
+		_press_pitch = lerpf(0.92,1.29,closing)
+
+func _sync_story(story: Dictionary, fresh: bool, previous_phase: String,player:Dictionary) -> void:
 	_set_story_room(String(story.get("room", "")))
 	_step = String(story.get("step", ""))
 	var people: Array = story.get("people", [])
 	if _room == "sleepward":
 		_listen_to_wheels(people)
+	elif _room=="signatures":
+		_listen_to_press(story,player)
 	var cue_id := int(story.get("cueId", -1))
 	if cue_id > _story_id:
 		_story_id = cue_id
@@ -363,7 +418,7 @@ func set_view(s: Dictionary) -> void:
 	_night = int(s["night"])
 	_phase = String(s["phase"])
 	_pause_mix(bool(s.get("paused", false)))
-	_sync_story(s.get("story", {}), fresh, previous_phase)
+	_sync_story(s.get("story", {}), fresh, previous_phase,s.get("player",{}))
 	if _room in ["maintenance", "signatures", "sleepward"]:
 		_dim = false
 		_set_mix()

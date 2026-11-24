@@ -28,7 +28,7 @@ const LESSONS := [
 	"后两瓶自选路线。绕到外侧蓝台就能直投；走中间黄台要过裂砖、借侧墙弹射。",
 	"先向左弹盖，再向右弹盖。记下两次跟对的窗号，把汽水送给两次都跟对的伙伴。",
 	"先送两瓶，听井口的交班铃。带着自己的脚步去检修间，观察三扇窗里的录像。",
-	"核对签名，用录制台记下你踩踏板的路线。回放时穿过铁闸。厂里替你签字的员工也在。",
+	"把站在黄踏板上的两秒录进磁带。回放时穿过铁闸，留意身后启动的压辊。末闸前按住 D 向右冲。",
 	"奶蛙在一扇窗里睡着了。守住机器，盯住换位的窗；睁眼后贴近窗口试探、送瓶。撑过三轮就天亮。"]
 const WINDOW_COUNTS := [1,2,2,2,3,3,3,3]
 const SECONDS := [0,52,47,52,44,40,38,36]
@@ -83,6 +83,10 @@ var _section: Label
 var _sleep_dial: StoryPrint.SleepDial
 var _sleep_readout: Control
 var _brace_bars: Array[ColorRect] = []
+var _signature_panel: Control
+var _signature_key_bg: ColorRect
+var _plate_track: ColorRect
+var _plate_fill: ColorRect
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -434,6 +438,15 @@ func show_play(world:Control) -> void:
 	_optional.hide()
 	_hud["ProgressNote"] = p.paragraph(ticket,17,367,229,128,"",18,Print.MUTED_INK)
 	_hud["ProgressNote"].name = "ProgressNote"
+	_signature_panel = p.area(ticket,16,363,232,144,"SignaturePanel")
+	p.art(_signature_panel,0,0,230,2,"rule",Print.MUTED_INK)
+	_signature_key_bg = p.rect(_signature_panel,0,16,230,48,Print.TEAL)
+	_hud["SignatureKey"] = p.line(_signature_panel,6,17,218,45,"",23,Print.WHITE,1,HORIZONTAL_ALIGNMENT_CENTER,"SignatureKey")
+	_plate_track = p.rect(_signature_panel,0,68,230,8,Print.PAPER_SHADE)
+	_plate_fill = p.rect(_plate_track,0,0,0,8,Print.TEAL)
+	_hud["SignatureNote"] = p.paragraph(_signature_panel,1,86,229,74,"",16,Print.INK)
+	_hud["SignatureNote"].name = "SignatureNote"
+	_signature_panel.hide()
 	_sleep_dial = StoryPrint.SleepDial.new()
 	_sleep_dial.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.place(ticket,_sleep_dial,172,80,77,77)
@@ -644,6 +657,68 @@ func _apply_story(view:Dictionary,night:int,serving:bool) -> void:
 			_hud["ProgressNote"].visible = not _hud["ProgressNote"].text.is_empty()
 	if night==8 and room=="sleepward":
 		_sleep_dashboard(story)
+	elif night==7 and room=="signatures":
+		_signature_dashboard(story)
+
+func _signature_dashboard(story:Dictionary) -> void:
+	var step := str(story.get("step",""))
+	var cue := str(story.get("cue",""))
+	var recording := step in ["take_one","take_two"]
+	if step in ["play_one","play_two","sill_wait","help_hold","sill_clear","exit_signature"]:
+		_hud["Controls"].text = "WASD / 方向键  移动     按住 D / →  向右过闸"
+	elif recording:
+		_hud["Controls"].text = "WASD 移动    在黄踏板上连续站满 2 秒    左键封存"
+	_signature_panel.visible = recording or step in ["play_two","sill_wait","help_hold"]
+	if not _signature_panel.visible:
+		return
+	_hud["ProgressNote"].hide()
+	_plate_track.visible = recording
+	_signature_key_bg.color = Print.TEAL
+	var key := ""
+	var note := ""
+	if recording:
+		var ticks := clampi(int(story.get("plateTicks",0)),0,40)
+		var ready:bool = story.get("marks",[]).any(func(m:Dictionary): return m.get("kind")=="seal_ready")
+		_plate_fill.size.x = 230.0 if ready else 230.0*ticks/40.0
+		_hud["PhaseValue"].text = "磁带可以封存" if ready else "录下两秒停留"
+		if ready:
+			_hud["TaskValue"].text = "黄踏板已录满两秒。现在点左键封存这段磁带。"
+			key = "左键  ·  封存"
+			note = "磁带封存后，你会回到录制台；录像里的你将照原路踩板。"
+		else:
+			_hud["TaskValue"].text = "走上黄踏板，连续站满两秒。等票上显示“左键 · 封存”，再点左键。"
+			key = "还需 %.1f 秒"%((40-ticks)/20.0) if ticks>0 else "站上黄踏板"
+			note = "刚才点早了，录制仍在继续。" if cue=="seal_early" else "站稳，留一段踩着踏板的录像。"
+	elif step=="play_two":
+		var press := StoryPrint.press_state(story)
+		if press=="press_shadow":
+			_hud["PhaseValue"].text = "压辊在你身后"
+			_hud["TaskValue"].text = "向右跑，趁回影踩住踏板穿闸。上路绕过隔柱；下路裂砖会塌。"
+			_signature_key_bg.color = Color("#812d38")
+			key = "向右跑  →"
+		elif press=="press_warn":
+			_hud["PhaseValue"].text = "左侧压辊启动"
+			_hud["TaskValue"].text = "沿上侧绕过隔柱，走向右边的闸。身后机器一启动就会追过来。"
+			_signature_key_bg.color = Color("#854734")
+			key = "压辊预警"
+		else:
+			key = "第二段  ·  回放"
+		note = "压辊追上你或踩穿裂砖，磁带从本段开头重放。"
+		if cue in ["press_caught","tape_rewind"] and int(story.get("stageTick",0))<32:
+			note = "原来的磁带已倒回第二段开头。现在继续向右走，等回影踩板。"
+	elif step=="sill_wait":
+		_hud["PhaseValue"].text = "末闸前再来" if cue=="sill_missed" else "到末闸标线"
+		_hud["TaskValue"].text = "走到右侧门前的标线，按住 D 或 →。等回影抬闸，保持向右就会穿过去。"
+		key = "按住 D / →"
+		note = "刚才错过了开门，现在就在末闸前。按住右方向再试。" if cue=="sill_missed" else "回放最后一帧会把闸抬起约 1.2 秒。可提前按住方向键。"
+	else:
+		_hud["PhaseValue"].text = "末闸抬起了"
+		_hud["TaskValue"].text = "现在按住 D 或 →，向右穿过抬起的闸门。"
+		_signature_key_bg.color = Color("#812d38")
+		key = "按住 D / →"
+		note = "回影正替你扶着闸。错过这次，会回到门前再试。"
+	_hud["SignatureKey"].text = key
+	_hud["SignatureNote"].text = note
 
 func _sleep_dashboard(story:Dictionary) -> void:
 	var step := str(story.get("step","sleep_reveal"))
@@ -681,17 +756,15 @@ func _duty_count(night:int,step:String) -> String:
 	if night==6:
 		return "三窗待核" if step in ["enter_hatch","observe_windows"] else "回影已核"
 	if night==7:
-		return "2 / 2" if step=="exit_signature" else ("1 / 2" if step in ["record_two","take_two","play_two","help_hold"] else "0 / 2")
+		return "2 / 2" if step in ["sill_clear","exit_signature"] else ("1 / 2" if step in ["record_two","take_two","play_two","sill_wait","help_hold"] else "0 / 2")
 	return "末班值守"
 
 func _duty_note(step:String) -> String:
 	match step:
 		"observe_windows": return "试着走两步，再停住。看哪扇窗里的你迟了两秒才停。"
 		"delay_door": return "先在踏板站一会儿，再朝门走。刚才的你会在两秒后踩回原处。"
-		"record_one","record_two": return "点亮起的录制台起录，走到踏板停留约两秒，再点一次左键封存。"
-		"take_one","take_two": return "把停留也录进去，才有时间让现在的自己穿过铁闸。"
-		"play_one","play_two": return "留意踏板上的回放。错过开门，可以回到录制台重录。"
-		"help_hold": return "保持向右移动，穿过最后一道门槛。"
+		"record_one","record_two": return "点亮起的录制台起录，走到踏板连续站满两秒，再点左键封存。"
+		"play_one": return "留意踏板上的回放，趁门闩抬起向右走。"
 	return ""
 
 func _confirm_leave() -> void:

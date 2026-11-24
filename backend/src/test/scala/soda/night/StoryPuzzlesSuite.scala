@@ -117,38 +117,57 @@ final class StoryPuzzlesSuite extends FunSuite:
     val around = walk(above,NightPoint(350,145))
     walk(around,NightPoint(428,164),w => story(w).step == "help_hold")
 
-  test("recordings replay exact footfalls; empty or completed tapes retry only the current door") {
+  test("seal only after two continuous seconds on the plate; an early click keeps the tape running") {
     val ready = firstPanel
     val empty = click(activate(ready,"panel"))
-    assertEquals(story(empty).step,"record_one")
-    assertEquals(story(empty).cue,"retry_gate")
-    val record = activate(empty,"panel")
+    assertEquals(story(empty).step,"take_one")
+    assertEquals(story(empty).cue,"seal_early")
+    val record = empty
     val up = NightInput.from(0,-1,0,-1,"none").get
     val detour = ticks(record,12,up)
     val plate = walk(detour,locate(detour,"plate"))
-    val replay = click(ticks(plate,45))
-    val echo = story(ticks(replay,12)).people.head
+    val steady = ticks(plate,45)
+    assertEquals(story(steady).plateTicks,Some(40))
+    assert(story(steady).marks.exists(_.kind == "seal_ready"))
+    val steppedOff = ticks(steady,7,up)
+    assertEquals(story(steppedOff).plateTicks,Some(0))
+    assertEquals(story(click(steppedOff)).step,"take_one")
+    val replay = click(steady)
+    val echo = story(ticks(replay,13)).people.head
     assertEquals(NightPoint(echo.x,echo.y),detour.player)
     assertEquals(echo.kind,"echo")
     val tooLate = ticks(replay,179)
-    assertEquals(story(tooLate).step,"record_one")
+    assertEquals(story(tooLate).step,"play_one")
     val second = zoneTwo
     assertEquals(story(second).step,"record_two")
     val cleared = click(activate(second,"panel"))
-    assertEquals(story(cleared).step,"record_two")
+    assertEquals(story(cleared).step,"take_two")
     assertEquals(cleared.player,NightPoint(260,186))
   }
 
-  test("second gate has a dividing wall, fragile lower approach, traversable upper route and ten-tick last sill") {
+  test("the moving press has a warning and catches a stationary player, rewinding the same tape") {
+    val replay = recordPlate(zoneTwo,50)
+    val before = story(replay).marks.find(_.kind=="press_warn").get
+    val front = story(ticks(replay,34)).marks.find(_.kind=="press_shadow").get
+    assert(front.x > before.x)
+    val caught = Iterator.iterate(replay)(NightEngine.step(_,NightInput.idle)).take(70)
+      .find(w => story(w).cue == "press_caught").get
+    assertEquals(caught.player,Gate.Second.panel)
+    assertEquals(story(caught).step,"play_two")
+    assert(story(caught).marks.exists(_.kind == "press_warn"))
+    assertEquals(story(passSecondGate(caught)).step,"help_hold")
+  }
+
+  test("both gate approaches work; the final lift retries at the waiting stripe with the same tape") {
     val ready = zoneTwo
     val replay = recordPlate(ready,85)
     val side = ticks(replay,30,NightInput.from(1,0,0,-1,"none").get)
     assert(side.player.x < 329)
     val lower = walk(replay,NightPoint(309,208))
-    val crumb = walk(lower,NightPoint(351,208),w => story(w).step == "record_two")
+    val crumb = walk(lower,NightPoint(351,208))
     val fell = ticks(crumb,12)
-    assertEquals(story(fell).step,"record_two")
-    assertEquals(story(fell).cue,"retry_gate")
+    assertEquals(story(fell).step,"play_two")
+    assertEquals(story(fell).cue,"tape_rewind")
     // Cut around the lower tip without lingering on the fragile tile.
     val lowerTip = walk(replay,NightPoint(323,198))
     val onBrick = walk(lowerTip,NightPoint(338,198))
@@ -156,15 +175,18 @@ final class StoryPuzzlesSuite extends FunSuite:
     val offBrick = walk(onBrick,NightPoint(350,183))
     val shortCut = walk(offBrick,NightPoint(428,164),w => story(w).step == "help_hold")
     assertEquals(story(shortCut).step,"help_hold")
-    val longTape = recordPlate(fell,85)
+    val longTape = replay
     val assist = passSecondGate(longTape)
     assert(assist.tick-longTape.tick >= 85,"The extra hold starts only after the player's recording has ended")
     assert(assist.player.x < 410,"The final sill must stay latched for the entire recording")
     assertEquals(story(assist).step,"help_hold")
-    assertEquals(story(ticks(assist,9)).step,"help_hold")
-    val missed = ticks(assist,10)
-    assertEquals(story(missed).step,"record_two")
-    val finalAssist = passSecondGate(recordPlate(missed,85))
+    assertEquals(story(ticks(assist,23)).step,"help_hold")
+    val missed = ticks(assist,24)
+    assertEquals(story(missed).step,"sill_wait")
+    assertEquals(story(missed).cue,"sill_missed")
+    assertEquals(missed.player,locate(missed,"stand_here"))
+    val finalAssist = ticks(missed,20)
+    assertEquals(story(finalAssist).step,"help_hold")
     val across = walk(finalAssist,NightPoint(415,164))
     val exit = ticks(across,10)
     assertEquals(story(exit).step,"exit_signature")

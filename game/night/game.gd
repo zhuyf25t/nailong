@@ -154,7 +154,7 @@ func _reader_key() -> String:
 	return (_profile_origin() + "|" + api.nickname).sha256_text()
 
 func _profile_origin() -> String:
-	if api.base_url == "http://127.0.0.1:8740" and OS.get_environment("NIGHT_LOCAL_ALTERNATE") == "1":
+	if api.base_url in ["http://127.0.0.1:8740", "http://127.0.0.1:8741"] and OS.get_environment("NIGHT_LOCAL_ALTERNATE") == "1":
 		return "http://127.0.0.1:8738"
 	return api.base_url
 

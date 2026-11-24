@@ -104,6 +104,10 @@ static func _story(raw: Variant) -> Dictionary:
 		return {}
 	for key: String in ["round", "sleepMax", "sleepTicks", "braceMax", "braceTicks"]:
 		story[key] = int(raw[key])
+	if raw.has("plateTicks"):
+		if not integer(raw.plateTicks, 0, 40):
+			return {}
+		story.plateTicks = int(raw.plateTicks)
 	for group: String in ["tiles", "people", "marks"]:
 		var points: Variant = _story_points(raw.get(group), group)
 		if points == null:
