@@ -2,7 +2,7 @@
 
 一款用方向键探索、用瞬移穿过机关的像素游戏。按下 X 后，角色会沿当前朝向瞬移一段固定距离，落在目标格的中央。
 
-[观看三分钟初玩实况（MP4）](https://github.com/zhuyf25t/nailong/blob/main/docs/demo.mp4)
+[在线观看三分钟初玩实况](https://zhuyf25t.github.io/nailong/)
 
 ## 在 Windows 上运行
 
