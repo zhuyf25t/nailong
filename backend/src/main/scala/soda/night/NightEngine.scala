@@ -11,10 +11,11 @@ object NightEngine:
   private def freshOrder(night: NightLevel): ShiftStage.Serving =
     ShiftStage.Serving(night.seconds.map(_ * 20), None, None, None, pristine = true)
 
-  def start(level: NightLevel, seed: Long,trace: Vector[NightPoint] = Vector.empty): NightWorld =
+  def start(level: NightLevel, seed: Long,trace: Vector[NightPoint] = Vector.empty,
+            sounds: Vector[EchoBeat] = Vector.empty): NightWorld =
     val origin = NightPoint(240,220)
     val w = NightWorld(level, seed, 0, 0, 0, origin, Direction.Left, freshOrder(level), NightEvent.Start, 0,
-      FactoryFloor.initial(level),None,if level.value == 1 then Vector(origin) else trace)
+      FactoryFloor.initial(level),None,if level.value == 1 then Vector(origin) else trace,sounds)
     w.copy(puzzle = StoryPuzzles.start(w))
 
   private def move(world: NightWorld, sample: NightInput): NightPoint =
@@ -38,6 +39,11 @@ object NightEngine:
         case (_: ShiftStage.Serving,Some(puzzle)) =>
           StoryPuzzles.step(current,puzzle,sample) match
             case PuzzleTransition.Continue(next,where) => current.copy(puzzle=Some(next),player=where.getOrElse(position))
+            case PuzzleTransition.Receipt(next,clean,where,beats) =>
+              current.copy(delivered=current.delivered+1,clean=current.clean+(if clean then 1 else 0),
+                puzzle=Some(next),player=where.getOrElse(position),
+                firstNightSounds=if current.night.value==1 && beats.nonEmpty then beats.takeRight(3) else current.firstNightSounds)
+                .emit(NightEvent.Deliver)
             case PuzzleTransition.Finish(next) =>
               current.copy(stage=ShiftStage.Won,puzzle=Some(next)).emit(NightEvent.Won)
         case (order: ShiftStage.Serving,_) =>

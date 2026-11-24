@@ -31,7 +31,15 @@ enum NightPhase(val wire: String):
   case Lost extends NightPhase("lost")
 
 enum NightAction:
-  case Idle, Probe, Toss, Pause, Resume, Hold
+  case Idle, Probe, Toss, Pause, Resume, Hold, Catch, Release
+
+enum EchoKind(val wire: String):
+  case Step extends EchoKind("step")
+  case Pipe extends EchoKind("pipe")
+  case Bell extends EchoKind("bell")
+
+final case class EchoBeat(kind: EchoKind, gap: Int):
+  require(gap >= 0, "A recorded sound cannot precede its previous beat")
 
 final case class NightPoint(x: Double, y: Double):
   def distance(other: NightPoint): Double = math.hypot(x - other.x, y - other.y)
@@ -49,6 +57,8 @@ object NightInput:
       case "pause" => Some(NightAction.Pause)
       case "resume" => Some(NightAction.Resume)
       case "hold" => Some(NightAction.Hold)
+      case "catch" => Some(NightAction.Catch)
+      case "release" => Some(NightAction.Release)
       case _ => None
     edge.filter(_ => Vector(mx, my, ax, ay).forall(n => n.isFinite && math.abs(n) <= 1.0))
       .map(new NightInput(mx, my, ax, ay, _))
@@ -90,7 +100,8 @@ final case class NightWorld private[night] (
     eventId: Long,
     floor: FactoryFloor,
     puzzle: Option[PuzzleWorld],
-    firstNightTrace: Vector[NightPoint]
+    firstNightTrace: Vector[NightPoint],
+    firstNightSounds: Vector[EchoBeat] = Vector.empty
 ):
   def phase: NightPhase = stage match
     case _: ShiftStage.Serving => NightPhase.Serving

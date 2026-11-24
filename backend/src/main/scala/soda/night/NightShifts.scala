@@ -31,7 +31,11 @@ private[night] final case class Shift(id: RunId, world: NightWorld, ack: Long, h
     else
       val (input, pending) = actions.dequeueOption.getOrElse(
         (if pulse - inputAt <= 6 then held else NightInput.idle, Queue.empty))
-      copy(world = NightEngine.step(world, input), actions = pending)
+      val next = NightEngine.step(world, input)
+      val changed = next.phase != world.phase || next.delivered != world.delivered ||
+        next.puzzle.map(StoryPuzzles.inputScope) != world.puzzle.map(StoryPuzzles.inputScope)
+      if changed then copy(world=next,actions=Queue.empty,held=held.withoutAction)
+      else copy(world=next,actions=pending)
 
 private final case class Shifts(active: Map[PlayerId,Shift], pending: Map[RunId,Clear], pulse: Long):
   def advance: Shifts =
@@ -40,7 +44,7 @@ private final case class Shifts(active: Map[PlayerId,Shift], pending: Map[RunId,
       .mapValues(_.advance(nextPulse)).toMap
     val finished = next.collect { case (player,shift)
       if shift.world.phase == NightPhase.Won && active(player).world.phase != NightPhase.Won =>
-        shift.id -> Clear(player, shift.world.night, shift.world.clean,shift.world.firstNightTrace)
+        shift.id -> Clear(player, shift.world.night, shift.world.clean,shift.world.firstNightTrace,shift.world.firstNightSounds)
     }
     Shifts(next, pending ++ finished, nextPulse)
 
@@ -66,12 +70,12 @@ final class NightShifts private (journal: NightJournal, ref: Ref[IO,Shifts], sta
         receipt <- journal.reserve(player, req, level, id)
         result <- receipt match
           case Left(problem) => IO.pure(Left(problem))
-          case Right(Receipt(existing,false,_)) =>
+          case Right(Receipt(existing,false,_,_)) =>
             ref.get.map(_.active.get(player).filter(_.id == existing).toRight(NightProblem.Replaced))
-          case Right(Receipt(fresh,true,trace)) =>
+          case Right(Receipt(fresh,true,trace,sounds)) =>
             IO(ThreadLocalRandom.current().nextLong()).flatMap { seed =>
               ref.modify { state =>
-                val shift = Shift(fresh, NightEngine.start(level, seed,trace), -1, NightInput.idle, Queue.empty,
+                val shift = Shift(fresh, NightEngine.start(level, seed,trace,sounds), -1, NightInput.idle, Queue.empty,
                   state.pulse, state.pulse)
                 (state.copy(active = state.active.updated(player, shift)), Right(shift))
               }

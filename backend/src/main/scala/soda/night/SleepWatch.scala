@@ -15,9 +15,10 @@ private[night] final case class WardHand(at: NightPoint, born: Int):
     Vector(StoryTile(at.x.toInt,at.y.toInt,
       if damaging(age) then StoryTileState.Hole else StoryTileState.Warn, until - (age-born)))
 
-private[night] final case class SleepWatch(round: SleepRound, stage: WardPhase, frog: Int, spin: Int,
+private[night] final case class SleepWatch(round: SleepRound, stage: WardPhase, frog: Int, decoy: Int, spin: Int,
                                           stabilized: Int = 0, held: Int = 0, doubts: Int = 0,
-                                          hand: Option[WardHand] = None)
+                                          hand: Option[WardHand] = None, relay: Option[Relay] = None,
+                                          caughtAt: Option[Int] = None, lean: NightPoint = NightPoint(0,0))
 
 private[night] object SleepWatch:
   private val center = NightPoint(240,180)
@@ -39,10 +40,16 @@ private[night] object SleepWatch:
 
   def start(w: NightWorld): SleepWatch = fresh(w,SleepRound.First)
 
+  def inputScope(h: SleepWatch): Int =
+    val dispatch = h.relay.fold(0)(r => if r.complete then 2 else 1)
+    h.stage.ordinal * 12 + h.round.ordinal * 3 + dispatch
+
   private def fresh(w: NightWorld, round: SleepRound): SleepWatch =
     val key = w.seed ^ (0x9e3779b97f4a7c15L * round.number)
     val mixed = (key ^ (key >>> 29)) * 0xbf58476d1ce4e5b9L
-    SleepWatch(round,WardPhase.Reveal,Math.floorMod(mixed >>> 3,4L).toInt,if (mixed & 1) == 0 then 1 else -1)
+    val frog = Math.floorMod(mixed >>> 3,4L).toInt
+    val decoy = (frog + 1 + Math.floorMod(mixed >>> 41,3L).toInt) % 4
+    SleepWatch(round,WardPhase.Reveal,frog,decoy,if (mixed & 1) == 0 then 1 else -1)
 
   // All four run on one closed rail. On higher rounds each sector's motor starts a
   // few ticks late, but every carriage brakes at its assigned quarter-turn station.
@@ -65,11 +72,26 @@ private[night] object SleepWatch:
       case SleepRound.Third => leg(0,24,100,1) + leg(1,122,232,-2) + leg(2,265,399,3)
     turns * h.spin
 
-  private def positions(h: SleepWatch, age: Int): Vector[NightPoint] =
-    Vector.tabulate(4) { index =>
-      val angle = (index + offset(h,age,index)) * math.Pi / 2.0
-      NightPoint(center.x + 150 * math.sin(angle), center.y - 65 * math.cos(angle))
+  private def station(h: SleepWatch, age: Int,index: Int): NightPoint =
+    val angle = (index + offset(h,age,index)) * math.Pi / 2.0
+    NightPoint(center.x + 150 * math.sin(angle), center.y - 65 * math.cos(angle))
+
+  private def positions(h: SleepWatch, age: Int): Vector[NightPoint] = Vector.tabulate(4) { index =>
+    val p = station(h,age,index)
+    if index == h.decoy && h.stage == WardPhase.Sleeping then NightPoint(p.x+h.lean.x,p.y+h.lean.y)
+    else p
+  }
+
+  // One imitation leans toward the moving noise. Keep its feet on a continuous track
+  // so the player can still follow any of the four shutters by eye.
+  private def listen(h: SleepWatch,age: Int,source: Option[NightPoint]): NightPoint =
+    val decoy = station(h,age,h.decoy)
+    val target = source.fold(NightPoint(0,0)) { p =>
+      val scale = 16.0 / decoy.distance(p).max(16.0)
+      NightPoint((p.x-decoy.x)*scale,(p.y-decoy.y)*scale)
     }
+    val step = (1.4/h.lean.distance(target).max(1.4))
+    NightPoint(h.lean.x+(target.x-h.lean.x)*step,h.lean.y+(target.y-h.lean.y)*step)
 
   // Public slot is clockwise screen order starting northwest, never a persistent actor ID.
   private def screenOrder(point: NightPoint): Double =
@@ -117,14 +139,30 @@ private[night] object SleepWatch:
       math.abs(w.player.x-hazard.at.x)<=12 && math.abs(w.player.y-hazard.at.y)<=12)
     if unsafe then reveal(w,s,h.round,"ward_slip")
     else if duty.exists(_.until < age) then reveal(w,s,h.round,"brace_missed")
-    else if age >= h.round.length then
-      enter(s,h.copy(stage=WardPhase.Check,hand=None,held=0),"wake_chime")
     else
-      val gripping = in.action == NightAction.Hold && duty.exists(d => age >= d.from && near(w.player,d.at,18))
+      val atBrace = duty.exists(d => age >= d.from && near(w.player,d.at,18))
+      val gripping = in.action == NightAction.Hold && atBrace
       val held = if gripping then h.held+1 else 0
       val secured = held == holdGoal
-      val next = h.copy(stabilized=h.stabilized + (if secured then 1 else 0),held=if secured then 0 else held,hand=hand)
-      if secured then stay(s.tell("brace_set"),next)
+      val started = if !secured || h.stabilized != 0 then None else h.round match
+        case SleepRound.First => None
+        case SleepRound.Second => Some(Relay.start(w,RelayLeg.FrogSwitch))
+        case SleepRound.Third => Some(Relay.start(w,RelayLeg.FrogLure))
+      val relayInput = in.action match
+        case NightAction.Hold | NightAction.Catch | NightAction.Release | NightAction.Toss if atBrace => in.withoutAction
+        case _ => in
+      val relay = h.relay.map(r => if r.complete then r else Relay.step(w,r,relayInput)).orElse(started)
+      val caught = h.caughtAt.orElse(Option.when(relay.exists(_.complete))(age))
+      val ready = h.round == SleepRound.First || caught.exists(age - _ >= 14)
+      val next = h.copy(stabilized=h.stabilized + (if secured then 1 else 0),held=if secured then 0 else held,
+        hand=hand,relay=relay,caughtAt=caught,lean=listen(h,age,relay.flatMap(_.lurePoint)))
+      // Keep the issuing tick in the logistics scope. Its catch/release feedback can
+      // finish before the next cap takes on the separate role of checking a friend.
+      if age >= h.round.length && h.round != SleepRound.First && caught.isEmpty then
+        reveal(w,s,h.round,"ward_relay_late")
+      else if age >= h.round.length && ready then
+        enter(s,next.copy(stage=WardPhase.Check,hand=None,held=0),"wake_chime")
+      else if secured then stay(s.tell("brace_set"),next)
       else if duty.exists(_.from == age) then stay(s.tell("brace_light"),next)
       else if born then stay(s.tell("hand_warn"),next)
       else stay(s,next)
@@ -136,6 +174,10 @@ private[night] object SleepWatch:
         val line = s.cue match
           case "ward_slip" => "手碰到了你的脚。地砖起雾后就离开原位。"
           case "brace_missed" => "稳压器熄了。下次走到亮杆边，持续按住左键。"
+          case "ward_relay_late" if h.round == SleepRound.Second =>
+            "醒铃响了，回收线还没改好。重守这一轮：第一根稳压杆扣好，就瞄准黄铜拨片弹盖。"
+          case "ward_relay_late" =>
+            "醒铃响了，带声的瓶子还没接回来。重守这一轮：扣好第一根杆就接瓶，把它送进带口，再去出口接回来。"
           case "wrong_bottle" => "它没有接住瓶子。再看一次真正奶蛙的位置。"
           case "round_clear" => "它喝到了。下一轮先记住奶蛙躺在哪扇窗。"
           case _ => "奶蛙睡着了。记住它躺在哪扇窗，闭帘以后盯住那一扇。"
@@ -143,6 +185,10 @@ private[night] object SleepWatch:
       case WardPhase.Sleeping =>
         val text = if h.hand.exists(t => age-t.born < 30) then "脚下有东西。离开那块冒气的砖，继续盯住床窗。"
           else if duties(h.round).lift(h.stabilized).exists(d => age >= d.from) then "稳压杆亮了。走到灯旁，按住左键直到扣实，同时看住奶蛙的帘。"
+          else if h.relay.exists(!_.complete) then h.round match
+            case SleepRound.Second => "醒铃前要让回收线改道。盯住奶蛙的帘，瞄准黄铜拨片按右键弹盖。"
+            case _ => "要在醒铃前接回带声的瓶子。留声后松手送上回收线，盯住奶蛙，跑到落点接瓶。"
+          else if h.caughtAt.nonEmpty then "回收线已就绪。守住余下的换窗，等醒铃再去窗边弹盖。"
           else "四扇帘在移动。盯住奶蛙入睡的那一扇，留意地砖与稳压灯。"
         ("sleep_watch",text)
       case WardPhase.Check => ("wake_probe", if h.doubts > 0 then "这扇窗没有回应。还可以检查一次，靠近选好的窗再按右键。"
@@ -169,6 +215,10 @@ private[night] object SleepWatch:
       case WardPhase.Face => Vector(mark(outlet,"spout"))
       case WardPhase.Exit => Vector(mark(exit,"exit"))
       case _ => Vector.empty
-    val left = if h.stage == WardPhase.Reveal then h.round.length else if watching then h.round.length-age else 0
-    StoryView(step,"sleepward",objective,s.cue,s.cueId,h.hand.toVector.flatMap(_.tiles(age)),people,lever++hand++end,
-      age,h.round.number,left,h.round.length,if secured then holdGoal else h.held,holdGoal)
+    val lured = Option.when(watching && math.hypot(h.lean.x,h.lean.y) > 3)(mark(positions(h,age)(h.decoy),"lured_pane"))
+    val bottle = Option.when(h.round == SleepRound.Third && h.relay.exists(_.complete) &&
+      (h.stage == WardPhase.Check || h.stage == WardPhase.Deliver))(mark(w.player,"ward_bottle"))
+    val left = if h.stage == WardPhase.Reveal then h.round.length else if watching then (h.round.length-age).max(0) else 0
+    StoryView(step,"sleepward",objective,s.cue,s.cueId,h.hand.toVector.flatMap(_.tiles(age)),people,lever++hand++lured++bottle++end,
+      age,h.round.number,left,h.round.length,if secured then holdGoal else h.held,holdGoal,
+      relay = if watching then h.relay.map(Relay.view(w,_)) else None)

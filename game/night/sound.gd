@@ -1,6 +1,7 @@
 class_name NightSound
 extends Node
 
+const RelayAudio = preload("res://night/relay_sound.gd")
 const SOUND_DIR := "res://assets/night/audio/"
 const CLIPS := ["plant", "radio", "pursuit", "cap_left", "cap_right", "throw",
 	"bounce_left", "bounce_right", "blocked", "deliver", "chuckle", "relay",
@@ -25,7 +26,7 @@ const STORY_FOLEY := {
 	"sleep_show":["glass_1", 0.30], "sleep_close":["shutter", 0.42],
 	"brace_light":["relay", 0.37], "brace_set":["rubber_pulse", 0.71],
 	"hand_warn":["brick_crack", 0.31], "ward_slip":["brick_drop", 0.64],
-	"brace_missed":["blocked", 0.54], "wake_chime":["deliver", 0.39],
+	"brace_missed":["blocked", 0.54], "ward_relay_late":["shutter", 0.55], "wake_chime":["deliver", 0.39],
 	"wrong_bottle":["shutter", 0.62], "round_clear":["deliver", 0.56],
 	"ward_face":["wake_face", 0.87], "ward_clear":["dawn", 0.82]
 }
@@ -39,6 +40,7 @@ var _pursuit: AudioStreamPlayer
 var _space: AudioStreamPlayer
 var _story_voice: AudioStreamPlayer
 var _press_player: AudioStreamPlayer
+var _relay: RelayAudio
 var _press_bus: StringName
 var _press_state := ""
 var _press_gain := 0.0
@@ -73,8 +75,11 @@ func _ready() -> void:
 	if AudioServer.get_driver_name() == "Dummy" and not mix_without_device:
 		set_process(false)
 		return
-	for key: String in CLIPS + STORY_CLIPS:
+	for key: String in CLIPS + STORY_CLIPS + RelayAudio.CLIPS:
 		_sounds[key] = load(SOUND_DIR + key + ".wav") as AudioStreamWAV
+	_relay = RelayAudio.new()
+	add_child(_relay)
+	_relay.setup(_sounds)
 	_plant = _layer("plant")
 	_radio = _layer("radio")
 	_pursuit = _layer("pursuit")
@@ -113,6 +118,7 @@ func shutdown() -> void:
 	set_process(false)
 	if _radio == null:
 		return
+	_relay.stop()
 	_stop_all()
 	# Stop commands cross the mixer thread. Leave it time to release its playing streams.
 	var drain_seconds := clampf(AudioServer.get_output_latency() + 0.12, 0.18, 0.40)
@@ -142,6 +148,11 @@ func _layer(key: String) -> AudioStreamPlayer:
 func _set_mix() -> void:
 	# Bed gains are independent so the lamp relay can audibly swallow the waltz.
 	_space_gain = 0.0
+	if _relay != null and _relay.active:
+		_targets = Vector3(0.13,0.082 if _night <= 2 else 0.018,_relay.hunt_gain)
+		if _quiet_until > _last_tick:
+			_targets = Vector3.ZERO
+		return
 	if _room == "maintenance" and _step != "enter_hatch":
 		_targets = Vector3(0.10, 0.014, 0.0)
 		_space_gain = 0.60
@@ -192,13 +203,14 @@ func _process(delta: float) -> void:
 	if _closing or _paused or _muted or _radio == null:
 		return
 	var blend := 1.0 - exp(-delta * 5.0)
-	_mix_layer(_plant, _targets.x, blend)
-	_mix_layer(_radio, _targets.y, blend)
-	_mix_layer(_pursuit, _targets.z, blend)
-	_mix_layer(_press_player, _press_gain, blend)
+	var focus_gain := _relay.background_gain()
+	_mix_layer(_plant, _targets.x * focus_gain, blend)
+	_mix_layer(_radio, _targets.y * focus_gain, blend)
+	_mix_layer(_pursuit, _targets.z * focus_gain, blend)
+	_mix_layer(_press_player, _press_gain * focus_gain, blend)
 	_press_player.pitch_scale = lerpf(_press_player.pitch_scale,_press_pitch,blend)
 	if _space.stream != null:
-		_mix_layer(_space, _space_gain, blend)
+		_mix_layer(_space, _space_gain * focus_gain, blend)
 	var radio_pitch := 0.93 if _dim and _phase == "serving" else 1.0
 	_radio.pitch_scale = lerpf(_radio.pitch_scale, radio_pitch, blend)
 
@@ -216,6 +228,8 @@ func _mix_layer(player: AudioStreamPlayer, target: float, blend: float) -> void:
 
 func set_muted(muted: bool) -> void:
 	_muted = muted
+	if _relay != null:
+		_relay.mute(muted)
 	if muted and _radio != null:
 		_plant.volume_db = -80.0
 		_radio.volume_db = -80.0
@@ -227,6 +241,8 @@ func _pause_mix(pause_now: bool) -> void:
 	if pause_now == _paused:
 		return
 	_paused = pause_now
+	if _relay != null:
+		_relay.pause_mix(pause_now)
 	for player: AudioStreamPlayer in [_plant, _radio, _pursuit, _space, _story_voice, _press_player]:
 		if is_instance_valid(player) and player.has_stream_playback():
 			player.stream_paused = pause_now
@@ -263,6 +279,8 @@ func _set_story_room(room: String) -> void:
 
 
 func menu() -> void:
+	if _relay != null:
+		_relay.stop()
 	if _phase != "menu":
 		for voice in _voices:
 			voice.stop()
@@ -370,6 +388,8 @@ func _sync_story(story: Dictionary, fresh: bool, previous_phase: String,player:D
 	_set_story_room(String(story.get("room", "")))
 	_step = String(story.get("step", ""))
 	var people: Array = story.get("people", [])
+	if _step == "fourth_bottle" and _relay != null:
+		_relay.fourth_bottle(story,fresh)
 	if _room == "sleepward":
 		_listen_to_wheels(people)
 	elif _room=="signatures":
@@ -379,7 +399,9 @@ func _sync_story(story: Dictionary, fresh: bool, previous_phase: String,player:D
 		_story_id = cue_id
 		if not fresh:
 			var cue := String(story.get("cue", "none"))
-			if cue == "wake_answer":
+			if cue == "fourth_roll":
+				_cue("lower_belt",0.39)
+			elif cue == "wake_answer":
 				for person: Dictionary in people:
 					if person["kind"] == "wake_look" and _last_tick - _last_foley_tick.get(cue, -1000) >= 12:
 						var x := float(person["x"])
@@ -401,6 +423,8 @@ func set_view(s: Dictionary) -> void:
 		return
 	var previous_phase := _phase
 	if fresh:
+		if _relay != null:
+			_relay.stop()
 		_set_story_room("")
 		_story_id = -1
 		_last_foley_tick.clear()
@@ -418,7 +442,20 @@ func set_view(s: Dictionary) -> void:
 	_night = int(s["night"])
 	_phase = String(s["phase"])
 	_pause_mix(bool(s.get("paused", false)))
-	_sync_story(s.get("story", {}), fresh, previous_phase,s.get("player",{}))
+	var story: Dictionary = s.get("story",{})
+	var route: Variant = story.get("relay")
+	if _relay != null:
+		if route is Dictionary:
+			_relay.update(s,story,route,fresh)
+		else:
+			_relay.leave()
+	_sync_story(story, fresh, previous_phase,s.get("player",{}))
+	if route is Dictionary:
+		_dim = false
+		_last_event = int(s["eventId"])
+		_last_delivered = int(s["delivered"])
+		_set_mix()
+		return
 	if _room in ["maintenance", "signatures", "sleepward"]:
 		_dim = false
 		_set_mix()

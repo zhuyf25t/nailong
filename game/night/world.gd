@@ -1,5 +1,5 @@
 class_name NightWorldView
-extends "res://night/story_world.gd"
+extends "res://night/relay_world.gd"
 
 const STEP_SEC := 0.05
 const PLAYER_START := Vector2(240, 220)
@@ -60,6 +60,7 @@ func _ready() -> void:
 	clip_contents = true
 	load_world_art()
 	load_story_art()
+	load_relay_art()
 
 func _zoom() -> float:
 	return maxf(0.001, minf(size.x / WORLD.x, size.y / WORLD.y))
@@ -82,7 +83,7 @@ func delivery_target(cursor: Vector2) -> Vector2:
 	if view.is_empty() or view["phase"] != "serving":
 		return cursor
 	var story: Dictionary = view.get("story", {})
-	if story.get("room", "factory") != "factory" or story.get("step", "") == "supply":
+	if story.get("relay") is Dictionary or story.get("room", "factory") != "factory" or story.get("step", "") == "supply":
 		return cursor
 	if int(view["night"]) == 1 and TRAINING_TAG.has_point(cursor):
 		return Vector2(240, RECEIVE_Y)
@@ -115,6 +116,11 @@ func set_view(state: Dictionary) -> void:
 		return
 	if not fresh and next_tick == _last_tick and int(state["eventId"]) == _last_event and story.get("cueId") == previous_story.get("cueId") and story.get("step") == previous_story.get("step"):
 		return
+	var relay: Variant = story.get("relay")
+	if relay is Dictionary:
+		var before: Variant = previous_story.get("relay")
+		var new_leg: bool = fresh or not before is Dictionary or before.leg != relay.leg or int(state.order) != int(view.get("order",-1))
+		relay_snapshot(relay,new_leg,_blend())
 	if fresh or previous_story.get("cueId") != story.get("cueId"):
 		_cue_at = _clock
 		if story.get("room") == "sleepward":
@@ -245,7 +251,7 @@ func _draw() -> void:
 	var escaping := phase in ["escaping", "lost", "escaped"]
 	var dark := bool(view.get("dim", false)) or phase == "lost"
 	var story: Dictionary = view.get("story", {})
-	if story.get("room", "factory") != "factory":
+	if story.get("room", "factory") != "factory" or story.get("relay") is Dictionary or story.get("step") in ["fourth_bottle","clockout_walk"]:
 		_draw_puzzle(story, phase)
 		return
 	base_room(dark, escaping)
@@ -354,12 +360,28 @@ func _match_windows(people: Array, reset: bool) -> Dictionary:
 
 func _draw_puzzle(s: Dictionary, phase: String) -> void:
 	var p := _shown_player()
-	story_back(s, _clock, _aim)
+	var clocked_out: bool = s.get("step") == "fourth_bottle"
+	if clocked_out:
+		# The post-shift bottle is autonomous. The courier walks out through the
+		# south sill while the recorded rhythm continues in the empty factory.
+		p = Vector2(240,260 + mini(70,int(s.get("stageTick",0))*3))
+	var r: Variant = s.get("relay")
+	var factory: bool = s.get("room", "factory") in ["factory","relay"]
+	var tutorial: bool = r is Dictionary and r.leg == "dispatch" and int(view.night)==1 and int(view.order)==1
+	if factory:
+		relay_dispatch_floor(int(view.night),tutorial)
+	else:
+		story_back(s, _clock, _aim)
 	story_tiles(s, _clock)
 	if s.get("room", "") == "sleepward":
 		story_ring(s, _aim, _window_tracks)
+	if r is Dictionary:
+		relay_ground(r,view)
 	story_props(s, _clock)
-	var frame := 1 + posmod(floori(_clock * 9), 2) if _moving else 0
+	if s.get("step") == "fourth_bottle":
+		fourth_bottle_marks(s)
+	var frame := 1 + posmod(floori(_clock * 9), 2) if _moving or clocked_out else 0
+	var row := 0 if clocked_out else _facing
 	var people: Array = s.get("people", []).duplicate()
 	people.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.y < b.y)
 	var player_drawn := false
@@ -372,28 +394,36 @@ func _draw_puzzle(s: Dictionary, phase: String) -> void:
 		if person.kind == "echo":
 			echo_feet = at
 		if at.y > p.y and not player_drawn:
-			story_player(p, _facing, frame, s)
+			story_player(p, row, frame, s)
 			player_drawn = true
-		story_person(person, s, start, at, _clock)
+		if person.kind == "empty_bottle":
+			_relay_bottle(at,true,s.get("fourthSounds",[]),0)
+		else:
+			story_person(person, s, start, at, _clock)
 	if not player_drawn:
-		story_player(p, _facing, frame, s)
+		story_player(p, row, frame, s)
 	if s.get("room", "") == "sleepward":
 		ward_operating_lamp(s)
+		ward_relay_marks(s,p,_aim)
 		var feed_time := (_clock - _feed_at) / 0.38
 		if feed_time >= 0 and feed_time < 1:
 			var flight := _feed_from.lerp(_feed_to, feed_time) - Vector2(0, sin(feed_time * PI) * 13)
 			draw_bottle(flight, _feed_to - _feed_from, false)
 		elif feed_time < 1.6:
 			impact(_feed_to, (feed_time - 1) / 0.6, PAPER)
-	_draw_flying_bottle()
-	if s.get("step") not in ["sleep_watch", "sleep_reveal"]:
-		_draw_probe()
-	if phase == "serving" and Rect2(Vector2.ZERO, WORLD).has_point(_aim):
-		var axis := (_aim - p).normalized()
-		dots(p + axis * 14, p + axis * 23, Color(PAPER, 0.6), 4)
-		_brackets(_aim.round(), 4, 4, Color(PAPER, 0.8))
+	if r is Dictionary:
+		relay_objects(r,p,_point(view.player),_aim,_blend(),tutorial)
+	else:
+		_draw_flying_bottle()
+		if s.get("step") not in ["sleep_watch", "sleep_reveal"]:
+			_draw_probe()
+		if phase == "serving" and s.get("step") not in ["fourth_bottle","clockout_walk"] and Rect2(Vector2.ZERO, WORLD).has_point(_aim):
+			var axis := (_aim - p).normalized()
+			dots(p + axis * 14, p + axis * 23, Color(PAPER, 0.6), 4)
+			_brackets(_aim.round(), 4, 4, Color(PAPER, 0.8))
 	story_front(s, _clock - _cue_at)
 	if s.get("room") == "signatures" and echo_feet.is_finite():
+		signature_echo_face(s,echo_feet)
 		signature_identity_tags(p, echo_feet, s)
 
 func _update_echo() -> void:

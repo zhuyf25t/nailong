@@ -856,7 +856,9 @@ func _ward_window(p: Vector2, kind: String, s: Dictionary, t: float) -> void:
 		_decal("window_lunge", 0, 3, Rect2(x - 21, y - 19, 42, 38))
 
 func _ward_dial(s: Dictionary) -> void:
-	var center := Vector2(240, 176)
+	# When the floor carries bottles, the overhead time clock displays the same
+	# countdown. Its dial is clear of the moving shutters and the branch inlet.
+	var center := Vector2(240,32) if s.get("relay") is Dictionary else Vector2(240,176)
 	var left := int(s.get("sleepTicks", 0))
 	var cap := maxi(1, int(s.get("sleepMax", 1)))
 	var step := String(s.get("step", ""))

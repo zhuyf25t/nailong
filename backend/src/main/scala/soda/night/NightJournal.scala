@@ -1,6 +1,7 @@
 package soda.night
 
 import cats.effect.IO
+import cats.syntax.all.*
 import io.circe.Json
 import io.circe.parser.decode
 import io.circe.syntax.*
@@ -16,8 +17,10 @@ final case class NightProfile(cleared: Vector[NightLevel], bestClean: Int):
     "cleared" -> Json.fromValues(cleared.map(n => Json.fromInt(n.value))),
     "bestClean" -> Json.fromInt(bestClean))
 
-private[night] final case class Receipt(id: RunId, fresh: Boolean, trace: Vector[NightPoint] = Vector.empty)
-private[night] final case class Clear(player: PlayerId, level: NightLevel, clean: Int, trace: Vector[NightPoint])
+private[night] final case class Receipt(id: RunId, fresh: Boolean, trace: Vector[NightPoint] = Vector.empty,
+                                        sounds: Vector[EchoBeat] = Vector.empty)
+private[night] final case class Clear(player: PlayerId, level: NightLevel, clean: Int, trace: Vector[NightPoint],
+                                      sounds: Vector[EchoBeat])
 
 final class NightJournal(db: Database):
   private def readProfile(conn: Connection, player: PlayerId): NightProfile =
@@ -58,14 +61,19 @@ final class NightJournal(db: Database):
           s.setObject(4, proposed.uuid)
           s.executeUpdate()
         }
-        val trace = if night.value != 6 then Vector.empty else
-          Sql.statement(conn,"SELECT points::text FROM night_first_trace WHERE player_id=?") { s =>
+        val fresh = Receipt(proposed, fresh = true)
+        val receipt = if night.value == 1 then fresh else
+          Sql.statement(conn,"SELECT points::text,sounds::text FROM night_first_trace WHERE player_id=?") { s =>
             s.setObject(1,player.value)
-            Sql.first(s)(r => decode[Vector[(Double,Double)]](r.getString(1)).fold(
-              _ => throw new IllegalStateException("Invalid night trace"),_.map((x,y) => NightPoint(x,y))))
-              .getOrElse(Vector.empty)
+            Sql.first(s) { r =>
+              val trace = if night.value != 6 then Vector.empty else
+                decode[Vector[(Double,Double)]](r.getString(1)).fold(
+                  _ => throw new IllegalStateException("Invalid night trace"),_.map((x,y) => NightPoint(x,y)))
+              val sounds = Option(r.getString(2)).fold(Vector.empty[EchoBeat])(NightJournal.readSounds)
+              fresh.copy(trace=trace,sounds=sounds)
+            }.getOrElse(fresh)
           }
-        Right(Receipt(proposed, fresh = true,trace))
+        Right(receipt)
   }
 
   private[night] def record(finish: Clear): IO[Unit] = db.transaction { conn =>
@@ -78,15 +86,25 @@ final class NightJournal(db: Database):
       ()
     }
     if finish.level.value == 1 then
-      Sql.statement(conn,"INSERT INTO night_first_trace(player_id,points) VALUES(?,?::jsonb) ON CONFLICT DO NOTHING") { s =>
+      Sql.statement(conn,"""INSERT INTO night_first_trace(player_id,points,sounds) VALUES(?,?::jsonb,?::jsonb)
+        ON CONFLICT(player_id) DO UPDATE SET points=EXCLUDED.points,sounds=EXCLUDED.sounds
+        WHERE night_first_trace.sounds IS NULL AND EXCLUDED.sounds IS NOT NULL""") { s =>
         s.setObject(1,finish.player.value)
         s.setString(2,finish.trace.map(p => (p.x,p.y)).asJson.noSpaces)
+        if finish.sounds.isEmpty then s.setNull(3,java.sql.Types.VARCHAR)
+        else s.setString(3,finish.sounds.map(b => (b.kind.wire,b.gap)).asJson.noSpaces)
         s.executeUpdate()
       }
     ()
   }
 
 object NightJournal:
+  private[night] def readSounds(text: String): Vector[EchoBeat] =
+    val decoded = decode[Vector[(String,Int)]](text).toOption.filter(_.size <= 3)
+    decoded.flatMap(_.traverse { (name,gap) =>
+      EchoKind.values.find(_.wire == name).filter(_ => gap >= 0).map(EchoBeat(_,gap))
+    }).getOrElse(throw new IllegalStateException("Invalid recorded bottle sounds"))
+
   def initialize(conn: Connection): Unit =
     Sql.ddl(conn, """CREATE TABLE IF NOT EXISTS night_clears (
       player_id uuid NOT NULL REFERENCES soda_players(id), night smallint NOT NULL CHECK (night BETWEEN 1 AND 8),
@@ -96,3 +114,4 @@ object NightJournal:
       run_id uuid NOT NULL UNIQUE, PRIMARY KEY(player_id,request_id))""")
     Sql.ddl(conn,"""CREATE TABLE IF NOT EXISTS night_first_trace (
       player_id uuid PRIMARY KEY REFERENCES soda_players(id), points jsonb NOT NULL CHECK(jsonb_typeof(points)='array'))""")
+    Sql.ddl(conn,"ALTER TABLE night_first_trace ADD COLUMN IF NOT EXISTS sounds jsonb CHECK(jsonb_typeof(sounds)='array')")

@@ -32,6 +32,7 @@ var _seq := 0
 var _start_id := ""
 var _start_night := 0
 var _manual_pause := false
+var _sample_has_input := false
 
 func _ready() -> void:
 	var configured := OS.get_environment("SODA_API_URL").strip_edges().trim_suffix("/")
@@ -85,9 +86,17 @@ func stop_run() -> void:
 	_seq = 0
 
 func set_manual_pause(value: bool) -> void:
-	controls.release_all()
+	discard_input()
 	_manual_pause = value
 	_next_sample = 0
+
+func discard_input() -> void:
+	controls.release_all()
+	# A pending POST might already have reached the server. If it must be retried
+	# after losing focus, the same seq is either a duplicate or an idle sample.
+	if _op == Op.SAMPLE and _sample_has_input:
+		_body = JSON.stringify(Intent.neutral(_seq))
+		_sample_has_input = false
 
 func logout() -> void:
 	_cancel()
@@ -110,15 +119,27 @@ func _process(_delta: float) -> void:
 		if not _sending and now >= _retry_at:
 			_send()
 		return
-	if current.is_empty() or Wire.terminal(current) or now < _next_sample:
+	if current.is_empty() or Wire.terminal(current):
 		return
 	var paused: bool = current.paused
-	_next_sample = now + (1000 if paused and _manual_pause else SAMPLE_MS)
-	var sample := controls.sample(_seq)
+	# Continuous motion runs at 20 Hz. A fresh button edge can depart on the
+	# next render frame; the server serializes these physical actions by seq.
+	if now < _next_sample and (paused or _manual_pause or not controls.has_edges()):
+		return
+	if paused and _manual_pause:
+		_next_sample = now + 1000
+	elif now >= _next_sample:
+		# Anchor movement to the previous 50 ms boundary; slow frames skip
+		# missed samples, while immediate button edges keep their own timing.
+		_next_sample = now + SAMPLE_MS - (now - _next_sample) % SAMPLE_MS
+	var sample: Dictionary
 	if _manual_pause or paused:
-		sample.mx = 0.0
-		sample.my = 0.0
-		sample.action = ("pause" if _manual_pause else "resume") if paused != _manual_pause else "none"
+		var action := ("pause" if _manual_pause else "resume") if paused != _manual_pause else "none"
+		sample = Intent.neutral(_seq, action)
+		_sample_has_input = false
+	else:
+		sample = controls.sample(_seq)
+		_sample_has_input = sample.action != "none" or sample.mx != 0.0 or sample.my != 0.0
 	_begin(Op.SAMPLE, "/v1/night/run/%s/input" % current.runId, sample)
 
 func _begin(op: Op, path: String, payload: Dictionary = {}) -> void:
@@ -172,6 +193,11 @@ func _complete(result: int, status: int, _headers: PackedStringArray, body: Pack
 		return
 	var kind := _op
 	var raw: Variant = JSON.parse_string(body.get_string_from_utf8())
+	# A full authoritative queue has not accepted this seq. Preserve its aim and
+	# action, and let the simulation consume a slot before sending it again.
+	if kind == Op.SAMPLE and status == 409 and typeof(raw) == TYPE_DICTIONARY and raw.get("code") == "input_queue_full":
+		_retry_at = Time.get_ticks_msec() + SAMPLE_MS
+		return
 	_finish()
 	if status < 200 or status >= 300:
 		_failure(kind, status, raw)
@@ -201,8 +227,7 @@ func _complete(result: int, status: int, _headers: PackedStringArray, body: Pack
 			if kind == Op.SAMPLE and (current.is_empty() or view.runId != current.runId or view.tick < current.tick or view.ack < _seq):
 				_failure(kind, 502, null)
 				return
-			if kind == Op.START or (not current.is_empty() and (
-					view.order != current.order or view.phase != current.phase or view.story.step != current.story.step)):
+			if kind == Op.START or input_context_changed(current, view):
 				controls.release_all()
 			current = view
 			_seq = view.ack + 1
@@ -212,6 +237,23 @@ func _complete(result: int, status: int, _headers: PackedStringArray, body: Pack
 				_next_sample = Time.get_ticks_msec()
 				shift_started.emit(view)
 			changed.emit(view)
+
+static func input_context_changed(before: Dictionary, after: Dictionary) -> bool:
+	if before.is_empty() or before.order != after.order or before.phase != after.phase:
+		return true
+	if before.story.room != after.story.room or before.story.step != after.story.step:
+		return true
+	var old: Variant = before.story.get("relay")
+	var next: Variant = after.story.get("relay")
+	if old == null or next == null:
+		return (old == null) != (next == null)
+	if old.leg != next.leg or old.stage != next.stage or before.story.round != after.story.round:
+		return true
+	var last_id := 0 if old.events.is_empty() else int(old.events.back().id)
+	for event: Dictionary in next.events:
+		if event.id > last_id and event.kind == "retry":
+			return true
+	return false
 
 func _failure(kind: Op, status: int, body: Variant) -> void:
 	var message := "交班台数据与游戏版本不匹配。" if status == 502 else "交班台退回请求（%d）。" % status

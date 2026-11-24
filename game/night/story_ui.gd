@@ -3,13 +3,14 @@ extends RefCounted
 # Each cue is an ordered list of speaker/text pairs. The play clock and the
 # subtitle clock are independent: several events can arrive in one HTTP batch.
 const CUES := {
-	"warm": [["奶蛙","瞄准上方二号窗，点左键。"],["奶蛙","第四顶工帽怎么挂我边上啦？"]],
+	"warm": [["奶蛙","站到白圈边。瓶颈进圈就按住，瞄准我再松手。"]],
 	"knock": [["车间声","[窗台上响了两下。玻璃背面又响了一下。]"]],
 	"tile_warn": [["脚下","[瓷砖松了一下。]"]],
 	"tile_open": [["脚下","[釉面碎开。下面有人吸气。]"]],
 	"tile_fall": [["奶龙","我刚才，踩到了谁的手？"]],
 	"saw_hand": [["地板下面","[一只手托着砖。指甲在背面慢慢刮过。]"]],
-	"route_blocked": [["奶蛋","站到蓝台直投，或到中间的黄台借墙。"]],
+	"route_blocked": [["奶蛋","看拨片。用盖子把下一只瓶转到另一条带。"]],
+	"fourth_bottle": [["回收口","[第四只空瓶滚出来。瓶里响着你刚才的脚步。]"]],
 	"hatch": [["井口","[梯子下面响起刚才那一声交班铃。]"]],
 	"wrong_window": [["观测仪","这段影像对不上。再走两步，停一下。"]],
 	"watch_longer": [["观测仪","采样太短。再走，再停，等两秒。"]],
@@ -47,6 +48,7 @@ const CUES := {
 }
 
 const HEADINGS := {
+	"clockout_walk":"去南门打卡","fourth_bottle":"听第四只瓶",
 	"supply":"先去取瓶","route":"选一条送货路","enter_hatch":"打开检修井","observe_windows":"比对三段录像",
 	"delay_door":"借回影压板","old_turn":"查看旧录像","exit_maintenance":"离开检修间",
 	"check_signature":"核对考勤簿","record_one":"录制第一段","take_one":"录下压板动作",
@@ -57,7 +59,7 @@ const HEADINGS := {
 }
 
 const TIMED := ["double_thanks","saw_hand","archive_turn","plate_ready","press_warn","press_shadow","press_caught",
-	"sill_wait","sill_missed","echo_hold","press_slam","tape_rewind","ward_face","ward_clear"]
+	"sill_wait","sill_missed","echo_hold","press_slam","tape_rewind","ward_relay_late","ward_face","ward_clear"]
 const AMBIENT := ["knock","tile_warn","tile_open","hatch","delay_found","delay_open","record_start",
 	"replay_start","gate_pass","sleep_close","brace_light","brace_set","hand_warn","wake_chime","wake_answer"]
 
@@ -80,20 +82,57 @@ var _last_event := -1
 var _last_speaker := "奶蛙"
 var _ambient_ticks:Dictionary[String,int] = {}
 var _press_state := ""
+var _relay_key := ""
+var _relay_event := -1
+var _relay_tick := -1
+var _relay_first_hint := false
+var _previous_step := ""
+var _ward_round := 0
+var _ward_scope := ""
+var _ward_age := -1
 var terminal := false
 
-func clear() -> void:
+func _drop_lines() -> void:
 	_waiting.clear()
 	_playing = null
 	current = []
 	_remaining = 0.0
+
+func clear() -> void:
+	_drop_lines()
 	_last_cue = ""
 	_last_phase = ""
 	_last_event = -1
 	_ambient_ticks.clear()
 	_press_state = ""
+	_relay_key = ""
+	_relay_event = -1
+	_relay_tick = -1
+	_relay_first_hint = false
+	_previous_step = ""
+	_ward_round = 0
+	_ward_scope = ""
+	_ward_age = -1
 	_last_speaker = "奶蛙"
 	terminal = false
+
+func _sync_ward(story:Dictionary) -> void:
+	var step := str(story.get("step",""))
+	var scope := "finale" if step in ["ward_face","ward_exit"] else step
+	var round_number := int(story.get("round",1))
+	var age := int(story.get("stageTick",0))
+	var restarted := round_number!=_ward_round or (scope!="finale" and (
+		(scope=="sleep_reveal" and _ward_scope!=scope) or (scope==_ward_scope and age<_ward_age)))
+	if restarted:
+		# Local relay ticks start over on retry, so a sound may recur with the same ID.
+		_relay_key = ""
+		_ambient_ticks.clear()
+		_last_cue = ""
+	if restarted or scope!=_ward_scope:
+		_drop_lines()
+	_ward_round = round_number
+	_ward_scope = scope
+	_ward_age = age
 
 func submit(view:Dictionary) -> void:
 	var night := int(view.get("night",1))
@@ -102,18 +141,28 @@ func submit(view:Dictionary) -> void:
 	var phase := str(view.get("phase","serving"))
 	var cue := str(story.get("cue","none"))
 	var tick := int(view.get("tick",0))
+	if room=="sleepward":
+		_sync_ward(story)
+	else:
+		_ward_scope = ""
+		_ward_round = 0
 	var serial := "%s/%s/%d"%[room,cue,int(story.get("cueId",0))]
 	if serial!=_last_cue:
 		_last_cue = serial
 		# A row can contain several crumbling tiles. Caption the audible pattern
 		# once instead of letting repeated ambient cracks drown out dialogue.
 		var minor := cue in ["tile_warn","tile_open","retry_gate","watch_longer","hand_warn","wake_answer","seal_early"]
-		if room=="sleepward" and cue=="wrong_window":
+		if room=="sleepward" and cue=="ward_relay_late":
+			var failure := "拨片还没转动。" if int(story.get("round",1))==2 else "带声的瓶还没接回来。"
+			_enqueue(cue,[["醒铃","[快门反扣。] "+failure+"重守本轮。"]])
+		elif room=="sleepward" and cue=="wrong_window":
 			_enqueue(cue,[["窗框","[空响。再试一扇，别再认错了。]"]])
 		elif cue=="double_thanks":
 			_enqueue(cue,[[_last_speaker,"谢谢。"],["窗台下面","……谢谢。"]])
 		elif not minor or tick-int(_ambient_ticks.get(cue,-200))>=85:
 			_enqueue(cue,CUES.get(cue,[]))
+			if cue=="warm":
+				_relay_first_hint = true
 			if minor:
 				_ambient_ticks[cue] = tick
 	var press := press_state(story)
@@ -123,6 +172,12 @@ func submit(view:Dictionary) -> void:
 		if not press.is_empty() and not rewinding:
 			_enqueue(press,CUES[press])
 	var windows:Array = view.get("windows",[])
+	var current_step := str(story.get("step",""))
+	if current_step=="fourth_bottle" and _previous_step!=current_step and cue!="fourth_bottle":
+		_enqueue("fourth_bottle",CUES.fourth_bottle)
+	_previous_step = current_step
+	if story.get("relay") is Dictionary and (room!="sleepward" or current_step=="sleep_watch"):
+		_submit_relay(view,story,story.relay)
 	if not windows.is_empty():
 		_last_speaker = "奶蛋" if windows[0].get("actor")=="egg" else "奶蛙"
 	if phase!=_last_phase and phase=="escaping":
@@ -137,10 +192,62 @@ func submit(view:Dictionary) -> void:
 	terminal = phase in ["won","lost","escaped"]
 	advance(0)
 
+func _submit_relay(view:Dictionary,story:Dictionary,r:Dictionary) -> void:
+	var key := "%s/%d/%s/%d"%[view.get("runId",""),int(view.get("order",1)),r.get("leg",""),int(story.get("round",0))]
+	var tick := int(r.get("tick",0))
+	if _relay_key!=key or tick<_relay_tick:
+		_relay_key = key
+		_relay_event = -1
+	_relay_tick = tick
+	for e:Dictionary in r.get("events",[]):
+		var id := int(e.get("id",-1))
+		if id<=_relay_event:
+			continue
+		_relay_event = id
+		var at := int(e.get("atTick",tick))
+		if tick-at>28:
+			continue
+		var kind := str(e.get("kind",""))
+		var entry:Array = []
+		var px := float(view.get("player",{}).get("x",240))
+		var offset := float(e.get("x",px))-px
+		var side := "身边" if absf(offset)<24 else ("左侧" if offset<0 else "右侧")
+		var source := "relay_"+kind
+		match kind:
+			"incoming":
+				if int(view.get("night",1))==1 and not _relay_first_hint:
+					entry = ["奶蛙","先去白圈旁。瓶颈进圈就按住左键。"]
+					_relay_first_hint = true
+			"break": entry = ["回收线","[碎玻璃滚进槽底。机器又送来一瓶。]"]
+			"sign": entry = ["收货窗","[签收铃响。]"]
+			"side_face": entry = ["窗玻璃","[玻璃猛地一鼓，牙齿在里面磕了一下。]"]
+			"pipe": entry = ["管道","[%s的管口响了。]"%side]
+			"replay_step": entry = ["回声瓶","[%s的瓶里传来脚步声。]"%side]
+			"replay_pipe": entry = ["回声瓶","[%s的瓶里重响了一下管道声。]"%side]
+			"replay_bell": entry = ["回声瓶","[%s的瓶里响起收货铃。]"%side]
+			"cap_through": entry = ["窗玻璃","[瓶盖穿过手掌，里面传来磨牙声。]"]
+			"hand_warn": entry = ["管道","[%s的钢钉开始跳动。]"%side]
+			"hiss": entry = ["瓶塞","[嘶——] 先带瓶离开脚下这一格。"]
+		if entry.is_empty():
+			continue
+		var ambient := kind in ["pipe","replay_step","replay_pipe","replay_bell","hand_warn","sign","cap_through"]
+		var rate_key := _relay_key+"/"+source
+		if ambient and at-int(_ambient_ticks.get(rate_key,-100))<32:
+			continue
+		_ambient_ticks[rate_key] = at
+		_enqueue(source,[entry])
+
 func _enqueue(cue:String,lines:Array) -> void:
 	if lines.is_empty():
 		return
 	var group := CaptionGroup.new(cue,lines)
+	if not _ward_scope.is_empty() and _ward_scope!="finale":
+		# Ward actions are live observations. A closed shutter, a reply, or a bottle
+		# replay must replace an earlier instruction while the player can still act.
+		if not cue.begins_with("relay_") or cue.begins_with("relay_replay_"):
+			_drop_lines()
+			_waiting.append(group)
+			return
 	if cue not in TIMED:
 		_waiting.append(group)
 		return
@@ -164,8 +271,8 @@ func _obsolete(previous:String,incoming:String) -> bool:
 	match incoming:
 		"archive_turn":
 			return previous in ["wrong_window","watch_longer"]
-		"ward_face","ward_clear":
-			return previous in ["sleep_show","round_clear","ward_slip","wrong_window","brace_missed","wrong_bottle"]
+		"ward_relay_late","ward_face","ward_clear":
+			return previous.begins_with("relay_") or previous in ["sleep_show","round_clear","ward_slip","wrong_window","brace_missed","wrong_bottle","ward_relay_late"]
 		"plate_ready","press_warn","press_shadow","press_caught","sill_wait","sill_missed","echo_hold","press_slam","tape_rewind":
 			return previous in ["seal_early","plate_ready","press_warn","press_shadow","press_caught","retry_gate",
 				"sill_wait","sill_missed","echo_hold","tape_rewind"]

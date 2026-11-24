@@ -21,6 +21,7 @@ var _guest_saved := false
 var _guest_path := ""
 var _settings := ConfigFile.new()
 const OPTIONS_PATH := "user://night-options.cfg"
+const HANDBOOK_EDITION := "relay-1"
 var _night_after_rules := 0
 
 func _ready() -> void:
@@ -146,15 +147,15 @@ func _start(night: int) -> void:
 		return
 	if not _settings.get_value("handbook", _reader_key(), false):
 		_night_after_rules = night
-		ui.show_rules("明白了，开始试工" if night == 1 else "明白了，开始本班")
+		ui.show_rules("明白了，开始试工" if night == 1 else "明白了，开始本班", true)
 		return
 	api.start(night)
 
 func _reader_key() -> String:
-	return (_profile_origin() + "|" + api.nickname).sha256_text()
+	return (HANDBOOK_EDITION + "|" + _profile_origin() + "|" + api.nickname).sha256_text()
 
 func _profile_origin() -> String:
-	if api.base_url in ["http://127.0.0.1:8740", "http://127.0.0.1:8741"] and OS.get_environment("NIGHT_LOCAL_ALTERNATE") == "1":
+	if api.base_url in ["http://127.0.0.1:8740", "http://127.0.0.1:8741", "http://127.0.0.1:8742"] and OS.get_environment("NIGHT_LOCAL_ALTERNATE") == "1":
 		return "http://127.0.0.1:8738"
 	return api.base_url
 
@@ -205,7 +206,7 @@ func _on_view(view: Dictionary) -> void:
 
 func _blur() -> void:
 	_focused = false
-	api.controls.release_all()
+	api.discard_input()
 	for key in ["night_left", "night_right", "night_up", "night_down"]:
 		if InputMap.has_action(key):
 			Input.action_release(key)
@@ -213,8 +214,8 @@ func _blur() -> void:
 func _process(_delta: float) -> void:
 	if page != "play" or not _focused or api.current.is_empty():
 		return
-	if ui.gameplay_blocked():
-		api.controls.release_all()
+	if ui.gameplay_blocked() or api.current.paused:
+		api.discard_input()
 		world.set_aim(Vector2(-1,-1))
 		return
 	api.controls.move = Input.get_vector("night_left","night_right","night_up","night_down")
@@ -231,8 +232,16 @@ func _direction(at: Vector2) -> Vector2:
 	var player: Dictionary = api.current.player
 	return (at - Vector2(player.x,player.y)).normalized()
 
+func _at_brace(story: Dictionary) -> bool:
+	var player: Dictionary = api.current.player
+	var point := Vector2(player.x, player.y)
+	for mark: Dictionary in story.get("marks", []):
+		if mark.kind == "brace" and point.distance_squared_to(Vector2(mark.x,mark.y)) <= 18.0 * 18.0:
+			return true
+	return false
+
 func _input(event: InputEvent) -> void:
-	if page != "play" or api.current.is_empty() or ui.gameplay_blocked():
+	if page != "play" or api.current.is_empty() or ui.gameplay_blocked() or api.current.paused:
 		return
 	# Windows may deliver the click that reactivates this window before focus_entered.
 	if event is InputEventMouseButton and event.pressed:
@@ -243,16 +252,27 @@ func _input(event: InputEvent) -> void:
 		_cursor = event.position
 	elif event is InputEventMouseButton:
 		_cursor = event.position
-		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-			api.controls.holding = false
-		if not event.pressed or api.current.phase != "serving":
+		if api.current.phase != "serving":
 			return
 		var at := world.screen_to_world(_cursor)
-		if not FACTORY_BOUNDS.has_point(at):
-			return
+		var inside := FACTORY_BOUNDS.has_point(at)
 		var story: Dictionary = api.current.get("story", {})
+		var relay_active := typeof(story.get("relay")) == TYPE_DICTIONARY
+		api.controls.move = Input.get_vector("night_left","night_right","night_up","night_down")
+		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			api.controls.holding = false
+			api.controls.relay_left(false, _direction(at), inside)
+			return
+		if not event.pressed or not inside:
+			return
 		if story.get("step") == "sleep_watch" and event.button_index == MOUSE_BUTTON_LEFT:
-			api.controls.holding = true
+			if not relay_active or _at_brace(story):
+				api.controls.holding = true
+				return
+		if relay_active and event.button_index == MOUSE_BUTTON_LEFT:
+			api.controls.relay_left(true, _direction(at), inside)
+			return
+		if story.get("room") == "relay" and not relay_active:
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var target: Vector2 = world.delivery_target(at) if story.get("room", "factory") == "factory" else at
@@ -261,6 +281,9 @@ func _input(event: InputEvent) -> void:
 			api.controls.press("throw", Vector2.UP if aim.is_zero_approx() else aim)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			var aim := _direction(at)
-			if aim.is_zero_approx() and story.get("room", "factory") != "factory":
-				aim = Vector2.UP
+			if aim.is_zero_approx():
+				if relay_active:
+					aim = api.controls.aim
+				elif story.get("room", "factory") != "factory":
+					aim = Vector2.UP
 			api.controls.press("probe", aim)

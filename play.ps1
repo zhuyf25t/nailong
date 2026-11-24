@@ -30,7 +30,7 @@ function Read-NightHealth([string]$address) {
     } catch { return $null }
 }
 function Test-CampaignServer($health) {
-    return ($health.status -eq 'ok' -and $health.game -eq 'nightshift' -and $health.storyCampaign -eq 3)
+    return ($health.status -eq 'ok' -and $health.game -eq 'nightshift' -and $health.storyCampaign -eq 4)
 }
 
 # Serialize startup and import when multiple windows use the same service.
@@ -45,8 +45,8 @@ try {
     if (-not $ConnectTo -and -not (Test-CampaignServer $health)) {
         # Reuse a current server first, then choose a free port without interrupting a shift.
         $free = if (-not $health) { 8738 }
-        $folders = @{ 8738 = $runtime; 8740 = (Join-Path $runtime 'story-server'); 8741 = (Join-Path $runtime 'press-server') }
-        foreach ($candidate in 8740,8741) {
+        $folders = @{ 8738 = $runtime; 8740 = (Join-Path $runtime 'story-server'); 8741 = (Join-Path $runtime 'press-server'); 8742 = (Join-Path $runtime 'relay-server') }
+        foreach ($candidate in 8740,8741,8742) {
             $candidateUrl = "http://127.0.0.1:$candidate"
             $other = Read-NightHealth $candidateUrl
             if (Test-CampaignServer $other) {
@@ -63,7 +63,7 @@ try {
         }
     }
     if (-not (Test-CampaignServer $health)) {
-        if ($ConnectTo) { throw "This endpoint must run Night Shift story campaign v3: $baseUrl" }
+        if ($ConnectTo) { throw "This endpoint must run Night Shift story campaign v4: $baseUrl" }
         $stopFile = Join-Path $serverRuntime 'server.stop'
         $serverPidFile = Join-Path $serverRuntime 'launcher.pid'
         if (Test-Path -LiteralPath $stopFile) { Remove-Item -LiteralPath $stopFile }

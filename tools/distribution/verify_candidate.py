@@ -1,5 +1,6 @@
 """Extract and play a Windows release on dedicated ports before optionally publishing it locally."""
 import argparse
+import hashlib
 import io
 import os
 from pathlib import Path, PurePosixPath
@@ -11,7 +12,7 @@ from zipfile import ZipFile
 from build import PACKAGE_NAME, WORKSPACE, sha256
 
 
-def extract(candidate, proof):
+def extract(candidate, proof, expected_service=None):
     expected = candidate.with_suffix(".sha256").read_text("ascii").split()[0]
     if sha256(candidate) != expected:
         raise RuntimeError("Candidate SHA-256 mismatch.")
@@ -27,10 +28,14 @@ def extract(candidate, proof):
                 raise RuntimeError(f"Unexpected release entry: {entry}")
         # ZipFile verifies each entry's CRC while extracting into the new directory.
         archive.extractall(proof)
-        with ZipFile(io.BytesIO(archive.read(root + "/app/server/lib/night-service.jar"))) as jar:
-            for cls in ("NightEngine$", "StoryView", "StoryPuzzles$", "SleepWatch$"):
+        service_bytes = archive.read(root + "/app/server/lib/night-service.jar")
+        service_digest = hashlib.sha256(service_bytes).hexdigest()
+        if expected_service and service_digest != expected_service.lower():
+            raise RuntimeError("The candidate does not contain the approved Scala service.")
+        with ZipFile(io.BytesIO(service_bytes)) as jar:
+            for cls in ("NightEngine$", "StoryView", "StoryPuzzles$", "SleepWatch$", "Relay", "RelayView", "RelayLeg"):
                 jar.getinfo("soda/night/" + cls + ".class")
-    print(f"Verified SHA-256 and extracted {len(names)} entries.", flush=True)
+    print(f"Verified SHA-256 and extracted {len(names)} entries; Scala JAR {service_digest}.", flush=True)
     return proof / root
 
 
@@ -51,6 +56,14 @@ def play(client, save, evidence, mode, label, ports):
     if run.returncode or "SCRIPT ERROR:" in log or "ERROR:" in log:
         details = run.stdout.decode("utf-8", "replace")
         raise RuntimeError(f"{label} exited {run.returncode}.\n{details[-1000:]}\n{log[-2500:]}")
+    successes = [line.lower() for line in log.splitlines() if "PASS" in line]
+    if mode == "-QuickCheck":
+        current = any("distribution check pass: relay-v4" in line for line in successes)
+    else:
+        current = any("night shift playthrough pass" in line and ("relay" in line or "return line" in line)
+                      for line in successes)
+    if not current:
+        raise RuntimeError(f"{label}: missing return-line v4 acceptance result.")
     if (save / "service.json").exists() or (save / "pg/postmaster.pid").exists():
         raise RuntimeError(f"{label}: local server or database did not shut down.")
     for line in log.splitlines():
@@ -81,6 +94,7 @@ def main():
     args.add_argument("candidate", type=Path)
     args.add_argument("--http-port", type=int, default=18741)
     args.add_argument("--database-port", type=int, default=55443)
+    args.add_argument("--service-sha256", help="Require the exact Scala artifact approved by the server tests.")
     args.add_argument("--publish-to", type=Path, help="Publish locally after all checks pass.")
     opts = args.parse_args()
     candidate = opts.candidate.resolve()
@@ -88,7 +102,7 @@ def main():
     evidence = proof / "logs"
     evidence.mkdir(parents=True)
     print(f"Acceptance logs: {evidence}", flush=True)
-    client = extract(candidate, proof / "中文解包")
+    client = extract(candidate, proof / "中文解包", opts.service_sha256)
     save = proof / "独立验收存档"
     ports = (opts.http_port, opts.database_port)
     play(client, save, evidence, "-QuickCheck", "01-first-launch", ports)

@@ -39,12 +39,20 @@ private[night] enum Gate(val panel: NightPoint, val plate: NightPoint, val door:
 private[night] final case class Frame(at: NightPoint, wave: Boolean, probe: Boolean = false)
 private[night] sealed trait PuzzleScene
 private[night] final case class Maintenance(stage: MaintenanceStep, live: Int, delayedSlot: Int,
-                                            reel: Vector[Frame]) extends PuzzleScene:
+                                            reel: Vector[Frame],departedAt: Option[Int] = None) extends PuzzleScene:
   def delayed: Frame = reel.head
 private[night] final case class Signatures(stage: SignatureStep, gate: Gate, frames: Vector[NightPoint],
                                           wear: Int = 0, sillFrame: Int = 0) extends PuzzleScene:
   def echo(age: Int): NightPoint = frames.lift(age).orElse(frames.lastOption).getOrElse(gate.panel)
 private[night] final case class SleepRoom(watch: SleepWatch) extends PuzzleScene
+private[night] final case class ParcelFloor(tiles: Vector[StoryTile],clean: Boolean = true)
+private[night] enum RelayContinuation:
+  case Dispatch(floor: ParcelFloor)
+  case MaintenanceDoor(maintenance: Maintenance)
+  case RecordedGate(signature: Signatures)
+private[night] final case class RelayRoom(relay: Relay, after: RelayContinuation) extends PuzzleScene
+private[night] case object ClockoutWalk extends PuzzleScene
+private[night] final case class FourthBottle(beats: Vector[EchoBeat], played: Int = 0) extends PuzzleScene
 final case class PuzzleWorld private[night](private[night] val scene: PuzzleScene, age: Int, elapsed: Int,
                                            cue: StoryCue, cueId: Int):
   private[night] def tell(signal: StoryCue): PuzzleWorld = copy(cue=signal,cueId=cueId+1)
@@ -67,17 +75,39 @@ object StoryPuzzles:
   private val upperRoute = Vector(NightPoint(260,186),NightPoint(299,150),NightPoint(351,150),NightPoint(381,164))
   private val signExit = NightPoint(433,164)
   private val slots = Vector(104,240,376)
+  private val rackEntry = NightPoint(240,220)
+  private val southExit = NightPoint(240,260)
+
+  private def dispatch(w: NightWorld): RelayRoom =
+    val tiles = if w.night.value == 3 then
+      (24 to 456 by 24).map { x =>
+        val y = if (x/24)%2 == 0 then 182 else 200
+        StoryTile(x,y,StoryTileState.Solid,0)
+      }.toVector
+    else Vector.empty
+    RelayRoom(Relay.start(w,RelayLeg.Dispatch),RelayContinuation.Dispatch(ParcelFloor(tiles)))
+
+  private def inspection(w: NightWorld): Maintenance =
+    val layout = Math.floorMod(w.seed,6L).toInt
+    val live = layout % 3
+    Maintenance(MaintenanceStep.Hatch,live,(live + 1 + layout/3) % 3,Vector(Frame(w.player,false)))
 
   def start(w: NightWorld): Option[PuzzleWorld] =
     w.night.value match
-      case 6 if w.delivered >= 2 =>
-        val layout = Math.floorMod(w.seed,6L).toInt
-        val live = layout % 3
-        val scene = Maintenance(MaintenanceStep.Hatch,live,(live + 1 + layout/3) % 3,Vector(Frame(w.player,false)))
-        Some(PuzzleWorld(scene,0,0,"none",0))
+      case 6 if w.delivered >= 2 => Some(PuzzleWorld(inspection(w),0,0,"none",0))
       case 7 => Some(PuzzleWorld(Signatures(SignatureStep.Ledger,Gate.First,Vector.empty),0,0,"none",0))
       case 8 => Some(PuzzleWorld(SleepRoom(SleepWatch.start(w)),0,0,"sleep_show",1))
-      case _ => None
+      case _ => Some(PuzzleWorld(dispatch(w),0,0,"none",0))
+
+  def inputScope(s: PuzzleWorld): (String,Int) = s.scene match
+    case RelayRoom(r,RelayContinuation.Dispatch(_)) => ("dispatch",r.attempt)
+    case RelayRoom(r,RelayContinuation.MaintenanceDoor(_)) => ("relay_maintenance",r.attempt)
+    case RelayRoom(r,RelayContinuation.RecordedGate(g)) => ("relay_signature_"+g.stage.ordinal,r.attempt)
+    case m: Maintenance => ("maintenance",m.stage.ordinal)
+    case g: Signatures => ("signatures",g.stage.ordinal*2 + g.gate.ordinal)
+    case SleepRoom(h) => ("sleepward",SleepWatch.inputScope(h))
+    case ClockoutWalk => ("clockout",0)
+    case _: FourthBottle => ("fourth",0)
 
   private def near(a: NightPoint,b: NightPoint,radius: Double = 17.0): Boolean = a.distance(b) <= radius
   private def click(in: NightInput): Boolean = in.action == NightAction.Probe || in.action == NightAction.Toss
@@ -93,6 +123,10 @@ object StoryPuzzles:
     else next
 
   def constrain(w: NightWorld,s: PuzzleWorld,next: NightPoint): NightPoint = s.scene match
+    case RelayRoom(_,RelayContinuation.MaintenanceDoor(m)) => constrain(w,s.copy(scene=m),next)
+    case RelayRoom(r,RelayContinuation.RecordedGate(g)) =>
+      val aisle = constrain(w,s.copy(scene=g),next)
+      if r.stage == RelayStage.Running then barrier(w.player,aisle,g.gate.door,open=false) else aisle
     case m: Maintenance if m.stage == MaintenanceStep.Delay =>
       val delayedNext = m.reel.lift(1).getOrElse(m.delayed)
       barrier(w.player,next,delayGate,near(delayedNext.at,delayPlate,15))
@@ -115,12 +149,87 @@ object StoryPuzzles:
       case m: Maintenance => maintenance(w,s,m,in)
       case g: Signatures => signatures(w,s,g,in)
       case SleepRoom(h) => SleepWatch.step(w,s,h,in)
+      case room: RelayRoom => courier(w,s,room,in)
+      case ClockoutWalk if near(w.player,southExit,20) && w.night.value == 1 =>
+        stays(s.enter(FourthBottle(w.firstNightSounds.takeRight(3)),"fourth_roll"))
+      case ClockoutWalk if near(w.player,southExit,20) => PuzzleTransition.Finish(s)
+      case ClockoutWalk => stays(s)
+      case last: FourthBottle => fourth(s,last)
+
+  private def beatTime(beats: Vector[EchoBeat],index: Int): Int =
+    12 + beats.slice(1,index+1).map(_.gap).sum
+
+  private def beatCue(kind: EchoKind): StoryCue = kind match
+    case EchoKind.Step => "fourth_step"
+    case EchoKind.Pipe => "fourth_pipe"
+    case EchoKind.Bell => "fourth_bell"
+
+  private def fourth(s: PuzzleWorld,last: FourthBottle): PuzzleTransition =
+    val due = (last.played until last.beats.size).takeWhile(i => s.age >= beatTime(last.beats,i))
+    if due.nonEmpty then
+      val sounded = due.foldLeft(s)((a,i) => a.tell(beatCue(last.beats(i).kind)))
+      stays(sounded.copy(scene=last.copy(played=last.played + due.size)))
+    else if last.played == last.beats.size && s.age >= beatTime(last.beats,last.played)+36 then PuzzleTransition.Finish(s)
+    else stays(s)
+
+  private def courier(w: NightWorld,s: PuzzleWorld,room: RelayRoom,in: NightInput): PuzzleTransition =
+    val next = Relay.step(w,room.relay,in)
+    room.after match
+      case RelayContinuation.Dispatch(floor) if next.complete =>
+        val heard = if w.night.value == 1 then next.recording else w.firstNightSounds
+        val future = w.copy(delivered=w.delivered+1,player=rackEntry,firstNightSounds=heard)
+        val scene =
+          if w.night.value == 6 && future.delivered == 2 then inspection(future)
+          else if future.delivered == 3 then ClockoutWalk
+          else dispatch(future)
+        PuzzleTransition.Receipt(s.enter(scene,"none"),next.clean && floor.clean,Some(rackEntry),next.recording)
+      case RelayContinuation.Dispatch(floor) => loadingFloor(w,s,room,next,floor)
+      case RelayContinuation.MaintenanceDoor(m) =>
+        val trace = followPlayer(w,m,in)
+        if next.complete && w.player.x >= delayGate.x then
+          stays(s.enter(trace.copy(stage=MaintenanceStep.Tape),"delay_open"))
+        else if next.complete then stays(s.copy(scene=trace))
+        else stays(s.copy(scene=RelayRoom(next,RelayContinuation.MaintenanceDoor(trace))))
+      case RelayContinuation.RecordedGate(g) =>
+        // A parcel and its recording share one physical press; a catch by the roller
+        // rewinds only this sealed take, restoring the parcel at the same panel.
+        signatures(w,s.copy(scene=g),g,in) match
+          case PuzzleTransition.Continue(p,Some(where)) =>
+            p.scene match
+              case RelayRoom(_,continuation) =>
+                val restarted = Relay.restart(w.copy(player=where),next,w.player)
+                at(p.copy(scene=RelayRoom(restarted,continuation)),where)
+              case _ => at(p,where)
+          case PuzzleTransition.Continue(p,None) if !next.complete =>
+            p.scene match
+              case ongoing: Signatures =>
+                stays(p.copy(scene=RelayRoom(next,RelayContinuation.RecordedGate(ongoing))))
+              case _ => stays(p)
+          case result => result
+
+  private def loadingFloor(w: NightWorld,s: PuzzleWorld,room: RelayRoom,next: Relay,floor: ParcelFloor): PuzzleTransition =
+    val tiles = floor.tiles.map(_.tick).map(t =>
+      if t.state == StoryTileState.Solid && t.beneath(w.player) then t.copy(state=StoryTileState.Warn,ticks=20) else t)
+    if next.stage == RelayStage.Running && tiles.exists(t => t.state == StoryTileState.Hole && t.beneath(w.player)) then
+      val fresh = Relay.restart(w.copy(player=rackEntry),next,w.player)
+      at(s.enter(RelayRoom(fresh,RelayContinuation.Dispatch(ParcelFloor(tiles,clean=false))),"tile_fall"),rackEntry)
+    else
+      val beforeAfter = floor.tiles.zip(tiles)
+      val base = s.copy(scene=room.copy(relay=next,after=RelayContinuation.Dispatch(floor.copy(tiles=tiles))))
+      if beforeAfter.exists((a,b) => a.state == StoryTileState.Warn && b.state == StoryTileState.Hole) then
+        stays(base.tell("tile_open"))
+      else if beforeAfter.exists((a,b) => a.state == StoryTileState.Solid && b.state == StoryTileState.Warn) then
+        stays(base.tell("tile_warn"))
+      else stays(base)
+
+  private def followPlayer(w: NightWorld,m: Maintenance,in: NightInput): Maintenance =
+    val probe = in.action == NightAction.Probe
+    val waving = probe || m.reel.takeRight(5).exists(_.probe)
+    m.copy(reel=(m.reel :+ Frame(w.player,waving,probe)).takeRight(41))
 
   private def maintenance(w: NightWorld,s: PuzzleWorld,m: Maintenance,in: NightInput): PuzzleTransition =
     import MaintenanceStep.*
-    val probe = in.action == NightAction.Probe
-    val waving = probe || m.reel.takeRight(5).exists(_.probe)
-    val next = m.copy(reel=(m.reel :+ Frame(w.player,waving,probe)).takeRight(41))
+    val next = followPlayer(w,m,in)
     val base = s.copy(scene=next)
     m.stage match
       case Hatch if click(in) && near(w.player,hatch) =>
@@ -131,11 +240,17 @@ object StoryPuzzles:
         else if slot != m.delayedSlot then stays(base.tell("wrong_window"))
         else
           val entry = NightPoint(110,207)
-          at(base.enter(next.copy(stage=Delay,reel=Vector.fill(41)(Frame(entry,false))),"delay_found"),entry)
+          val resumed = next.copy(stage=Delay,reel=Vector.fill(41)(Frame(entry,false)))
+          val work = Relay.start(w.copy(player=entry),RelayLeg.Maintenance)
+          at(base.enter(RelayRoom(work,RelayContinuation.MaintenanceDoor(resumed)),"delay_found"),entry)
       case Delay if w.player.x >= delayGate.x => stays(base.enter(next.copy(stage=Tape),"delay_open"))
       case Tape if click(in) && near(w.player,tape) => stays(base.enter(next.copy(stage=Turning),"archive_turn"))
       case Turning if s.age >= 30 => stays(base.copy(scene=next.copy(stage=Exit),age=0))
-      case Exit if near(w.player,maintenanceExit) => PuzzleTransition.Finish(base)
+      case Exit =>
+        val left = m.departedAt.orElse(Option.when(!near(w.player,tape,25))(s.age))
+        val leaving = base.copy(scene=next.copy(departedAt=left))
+        if near(w.player,maintenanceExit) && left.exists(t => s.age-t >= 12) then PuzzleTransition.Finish(leaving)
+        else stays(leaving)
       case _ => stays(base)
 
   private def onCrumb(p: NightPoint): Boolean = math.abs(p.x-crumb.x) <= 20 && math.abs(p.y-crumb.y) <= 16
@@ -146,8 +261,11 @@ object StoryPuzzles:
   private def pressFront(age: Int): Double =
     (238 + (age - pressWarningTicks).max(0) * 2.8).min(Gate.Second.door.x)
 
-  private def replay(s: PuzzleWorld,g: Signatures,signal: StoryCue): PuzzleTransition =
-    at(s.enter(g.copy(stage=SignatureStep.Playback,wear=0,sillFrame=0),signal),g.gate.panel)
+  private def replay(w: NightWorld,s: PuzzleWorld,g: Signatures,signal: StoryCue): PuzzleTransition =
+    val take = g.copy(stage=SignatureStep.Playback,wear=0,sillFrame=0)
+    val scene = if g.gate == Gate.First then take else
+      RelayRoom(Relay.start(w.copy(player=g.gate.panel),RelayLeg.Signature),RelayContinuation.RecordedGate(take))
+    at(s.enter(scene,signal),g.gate.panel)
 
   private def signatures(w: NightWorld,s: PuzzleWorld,g: Signatures,in: NightInput): PuzzleTransition =
     import SignatureStep.*
@@ -160,7 +278,7 @@ object StoryPuzzles:
         val recorded = g.copy(frames=(g.frames :+ w.player).takeRight(180))
         val held = plateTicks(recorded)
         val base = s.copy(scene=recorded)
-        if in.action == NightAction.Toss && held == plateHoldTicks then replay(base,recorded,"replay_start")
+        if in.action == NightAction.Toss && held == plateHoldTicks then replay(w,base,recorded,"replay_start")
         else if in.action == NightAction.Toss then stays(base.tell("seal_early"))
         else if held == plateHoldTicks && plateTicks(g) < held then stays(base.tell("plate_ready"))
         else stays(base)
@@ -168,8 +286,8 @@ object StoryPuzzles:
         val strain = g.gate == Gate.Second && (onCrumb(w.player) || onCrumb(g.echo(s.age)))
         val wear = (g.wear + (if strain then 1 else 0)).min(8)
         if g.gate == Gate.Second && s.age >= pressWarningTicks && w.player.x <= pressFront(s.age) then
-          replay(s,g,"press_caught")
-        else if wear >= 8 && onCrumb(w.player) then replay(s,g,"tape_rewind")
+          replay(w,s,g,"press_caught")
+        else if wear >= 8 && onCrumb(w.player) then replay(w,s,g,"tape_rewind")
         else if w.player.x >= g.gate.door.x && math.abs(w.player.y-g.gate.door.y)<=18 then
           if g.gate == Gate.First then
             at(s.enter(Signatures(Ready,Gate.Second,Vector.empty),"gate_pass"),Gate.Second.panel)
@@ -199,6 +317,38 @@ object StoryPuzzles:
                tiles: Vector[StoryTile] = Vector.empty): StoryView =
       StoryView(step,room,objective,s.cue,s.cueId,tiles,people,marks,s.age)
     s.scene match
+      case RelayRoom(r,after) =>
+        val active = Relay.view(w,r)
+        val scene = after match
+          case RelayContinuation.Dispatch(floor) =>
+            output("relay_dispatch","factory",active.objective,Vector.empty,Vector.empty,floor.tiles)
+          case RelayContinuation.MaintenanceDoor(m) =>
+            view(w,s.copy(scene=m)).copy(objective="把带声的瓶子送上回收带，引开管里的东西，再接回投过检修门。")
+          case RelayContinuation.RecordedGate(g) =>
+            val lit = view(w,s.copy(scene=g))
+            if r.stage == RelayStage.Running then
+              val locked = lit.marks.map(m => if m.kind == "gate_open" then m.copy(kind="gate") else m)
+              lit.copy(objective="压辊正在追上来。向拨片弹盖开槽，接住瓶子，瞄准闸后松手。",marks=locked)
+            else if g.stage == SignatureStep.Playback then lit.copy(objective="瓶子已穿闸。继续沿上侧往右跑，压辊还在后面！")
+            else lit
+        scene.copy(relay=Some(active))
+      case ClockoutWalk =>
+        output("clockout_walk","factory","三瓶签收了。走到南门，交还工牌。",Vector.empty,Vector(mark(southExit,"exit")))
+      case last: FourthBottle =>
+        val end = beatTime(last.beats,last.beats.size)+36
+        val pos = NightPoint(424-336.0*(s.age.toDouble/end).min(1.0),175)
+        val beat = last.beats.lift(last.played-1)
+        val sounding = last.played > 0 && s.age-beatTime(last.beats,last.played-1) < 8
+        val marks = if sounding then
+          (0 until last.played).filter(i => beatTime(last.beats,i) == beatTime(last.beats,last.played-1))
+            .map(i => mark(pos,"echo_"+last.beats(i).kind.wire)).toVector
+        else Vector.empty
+        val text = if !sounding then "三个人已下班。第四只空瓶从回收口滚出来。" else beat.map(_.kind) match
+          case Some(EchoKind.Step) => "瓶子里传来你刚才的脚步。"
+          case Some(EchoKind.Pipe) => "瓶子里又响起你敲过的那根管子。"
+          case Some(EchoKind.Bell) => "空瓶自己响了一声签收铃。"
+          case None => "回收口还在转。"
+        output("fourth_bottle","factory",text,Vector(person(pos,"empty_bottle")),marks).copy(fourthSounds=last.beats)
       case m: Maintenance =>
         import MaintenanceStep.*
         val room = "maintenance"
@@ -219,7 +369,10 @@ object StoryPuzzles:
                 mark(delayGate,if open then "gate_open" else "gate")))
           case Tape | Turning => output("old_turn",room,if m.stage==Tape then "去旧录像台，靠近点击读第一夜。" else "旧录像里的人，正朝你回头。",
             Vector(person(tape,if m.stage==Tape then "archive" else "archive_turn")),Vector(mark(tape,"old_tape")))
-          case Exit => output("exit_maintenance",room,"录像停了。去东南出口下班。",Vector(person(tape,"archive_turn")),Vector(mark(maintenanceExit,"exit")))
+          case Exit =>
+            val stride = m.departedAt.fold(0.0)(t => ((s.age-t)/16.0).min(1))
+            val lingering = NightPoint(tape.x+16*stride,tape.y-2*stride)
+            output("exit_maintenance",room,"录像已经结束。你往出口走时，里面那只又挪了一步。",Vector(person(lingering,"archive_turn")),Vector(mark(maintenanceExit,"exit")))
       case g: Signatures =>
         import SignatureStep.*
         val room = "signatures"

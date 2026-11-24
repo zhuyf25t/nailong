@@ -3,44 +3,36 @@ extends Control
 signal closed
 
 const Print = preload("res://night/ui_print.gd")
-const TABS := ["第一夜送货","第二夜辨认","漏投与护栏","遇险逃生"]
-const TITLES := ["第一夜怎么过","看手伸向哪里","把瓶子送进窗台","走到亮杆，再去南门"]
-const FIGURES := ["试工车间 · 两侧的备用拉杆在第一夜用不到","示例订单 · 上单向左，本次向右","侧墙反弹示意 · 第四夜选中间黄台时使用","逃生示意 · 本次亮起左杆"]
+const TABS := ["首夜接送","瓶盖验窗","漏接与改道","回声诱敌"]
+const TITLES := ["第一夜怎么过","看瓶盖停在哪里","瓶子掉下去，还能接","让瓶子替你出声"]
+const FIGURES := ["白圈是接瓶点。瓶颈进圈才按住左键，准星指向收货槽才松手。","同一枚盖经过手掌，停住与穿过去会有不同的回执。","实线是本趟轨道。下层带给你一次新的接瓶机会。","瓶底的三道刻痕把脚步、管响和铃声留了下来。"]
 const STEPS := [
-	[
-		["瞄准上方 2 号窗","把鼠标移到画面上方正中的窗台。奶龙从当前位置朝鼠标瞄准。"],
-		["点左键，连送三瓶","每次点左键投一瓶。看到交班票“已签收”加一再送下一瓶。第一夜没有时限，直接投就行。"],
-		["走到下方南门","已签收达到 3 / 3 时，按 WASD 或方向键走进下方正中的绿标，打卡解锁第二夜。"]
-	],
-	[
-		["读上一单的瓶盖记录","例如上一单写着“向左”。把鼠标放到奶龙身体右边，在场地内点右键，这次瓶盖就向右。"],
-		["看谁跟着这次瓶盖伸手","真伙伴这次向右伸手，冒牌货仍会向左伸手。看手的方向；真伙伴可能在左窗，也可能在右窗。"],
-		["再把鼠标移向真窗","瞄准真伙伴的窗台，点左键投瓶。两只动作相同就换边弹；动作消失可以再弹一次。"]
-	],
-	[
-		["投空还能再投","没飞进窗台，签收数不会变。等瓶子停下，调整站位，重新瞄准。带时限的班次仍会计时。"],
-		["选能站稳的出货台","第四夜后两单，绕到外侧蓝台可以直投；走中线裂砖到黄台，要借墙反弹。两条路线都先辨认真窗。"],
-		["借两侧墙壁反弹","站在黄台，把准星放到左墙或右墙。看好斜线，让瓶子反弹一次进目标窗，再点左键。"]
-	],
-	[
-		["柜下伸手，立刻移动","给冒牌货送了瓶，或瓶压到时，会进入追逐。看交班票提示和地面哪一侧亮起。"],
-		["走近亮起的应急杆","用 WASD 或方向键靠近左侧或右侧亮杆，会自动拉下。平时不用两个地面装置。"],
-		["从南门逃离","拉杆打开后立刻走进下方正中绿标，脱身可从本夜第一瓶重来。被追上也可以重试。"]
-	]
+	[["先去白圈旁等瓶","按 WASD 或方向键移动奶龙。看清货瓶沿哪条轨道来，提前站到白圈旁，先松开鼠标左键。"],
+	 ["瓶颈进圈时按住左键","看到“现在按住左键”就按下并保持。右侧浅绿刻度是接瓶时间；后几夜最短约 0.25 秒，要提前站好。"],
+	 ["瞄准收货槽，再松开","接稳后仍可走动。把鼠标移到收货槽中央再松手。铃响算签收，转身找下一圈；弹回的瓶也要再接。"]],
+	[["把准星对准窗里的手掌","从第二夜起，朝候选窗口点右键弹盖。视线跟着盖走；带着货瓶时也能弹盖。"],
+	 ["盖停在真伙伴手里","假手也会伸出来，盖却会穿过去。看见穿掌就验另一窗。盖飞空了，重新瞄准手掌再点右键。"],
+	 ["把货送进移动的槽口","记住亲手验过的窗。带瓶挪到合适角度，瞄准开启的槽口松开左键。盖用完时走近补给架。"]],
+	[["先看新的落点","漏接或没投进窗，货瓶会滑到下层带。看新的圈，横移去接；再次摔碎才从这趟开头补发。"],
+	 ["把盖打进道岔拨片","右键对准拨片，命中会看见轨道改向。反弹盖可以打带白边的铁板，再敲拨片或远处管口。"],
+	 ["空出双手再去截瓶","将手中瓶瞄向回收入口，松手送上带。看它滚向哪个落点，跑去白圈再接。"]],
+	[["留意脚下的材质","铁板会把脚步声传进管道，胶垫能消声。瓶底的刻痕显示它记住的声音。"],
+	 ["让一瓶声音沿带移动","带着瓶走过铁板，或朝管口弹盖；把装着声响的瓶送上回收带。它会按原来的间隔重放。"],
+	 ["趁怪物转身去接回","看管钉移向哪里，侧移避开手影。末班要赶在睡眠环归零前完成回收；错过醒铃就重守本轮。"]]
 ]
 const DUTIES := {
-	6: ["地下检修","认出慢两秒的你","三段录像 · 走动，再停住比较",[
-		["去检修井","送完两瓶，走到南侧井口，靠近后点左键。"],
-		["让录像露出时间差","在三扇窗前走动，停下来，等两秒。找刚刚才停的那扇，走到它下面点左键。"],
-		["把自己的脚步借给铁门","站在踏板上等约两秒，再向右走。两秒前的你将替你压住门闩。"]]],
-	7: ["录制过闸","让录像替你扶住闸","走错路会重放原带。错过末闸，可在门前重试。",[
-		["走上黄踏板，连续录满两秒","查台账，到录制台点左键。走上黄板站稳，看到“左键 · 封存”再点一下；早点击仍会继续录。"],
-		["回放时向右跑，躲开压辊","白脸头上写着「你」，褐色的「录像」会替你踩板。第二段压辊从左追来，沿上侧箭头绕柱。被追上会重放原带。"],
-		["末闸前，按住 D 或 →","到右侧门前标线，按住右方向。回影抬闸约 1.2 秒，保持向右就能穿过；慢了一步，会从末闸门前再试。"]]],
-	8: ["末班值守","别叫醒奶蛙","末班设备 · 四窗轮换，记住它的位置",[
-		["认窗，等它睡着","每轮开头先认奶蛙在哪。闭眼后沿轨道追它那扇窗；睡着时弹盖没有回应。圆环走完，窗才睁眼。"],
-		["稳住机座，躲开地手","稳机杆亮起，走近按住左键约 0.7 秒。看到“已稳住”就可松手。脚下出现红手印时马上离开。"],
-		["醒后近窗试探送瓶","走到候选窗前点右键，看到回应再贴近它点左键。可错探一次，错投或再错探会重来本轮。撑过三轮。"]]]
+	6:["检修回收","把带声的瓶送过检修门","监视器 → 带声诱瓶 → 延迟踏板",[
+		["找出慢两秒的录像","送完两趟，去南侧井口。走两步、停一下，走到迟了两秒才停的窗前，点左键核验。"],
+		["把声音放上回收带","站上铁板录到脚步，也可以朝管口弹盖。把带声的瓶送入回收口，观察管里的东西移开。"],
+		["接回瓶，用回影压门","赶到新落点按住左键接回，瞄准门槽松开。踏板上站一会再向右走，两秒前的你会扶住门。"]]],
+	7:["替身压线","让瓶子先穿过闸","录制踩板 → 弹盖开槽 → 接瓶送货 → 末闸向右",[
+		["站满两秒，左键封存","查台账，到录制台点左键。走上黄踏板站满两秒，看到“左键 · 封存”再点一下。"],
+		["第二道门，先把瓶送过去","回放时边跑边瞄。右键打货槽拨片，白圈旁按住左键接货，再朝闸后的槽口松手。左侧压辊会追上来。"],
+		["末闸前按住 D 或 →","踏到门前白线，按住右方向。回影抬闸约 1.2 秒，保持向右就能过；错过只从门前再试。"]]],
+	8:["末班回收","别叫醒奶蛙","睡眠环归零前办完回收，醒铃后近窗验收",[
+		["守住奶蛙的窗和机器","开眼先认窗，闭帘后追它的移动。稳机杆亮起，走近按住左键约 0.7 秒。脚下冒气就先躲开。"],
+		["稳好首杆，醒铃前办完","第二轮用右键弹盖拨岔。第三轮把带声的瓶送上带，诱开假窗，再去白圈接回。环归零还没办完，就重守本轮。"],
+		["办完后等醒铃，再去窗边","走到候选窗前点右键。看见回应再贴近那扇窗，点左键递瓶。错投或第二次错探从本轮再来。"]]]
 }
 
 var p := Print.new()
@@ -49,17 +41,22 @@ var _page := 0
 var _continue_label := "返回游戏"
 var _night := 0
 var _count := 4
+var _require_all := false
+var _read:Dictionary[int,bool] = {}
 
-func open(continue_label:String,night:=0) -> void:
+func open(continue_label:String,night:=0,require_all:=false) -> void:
 	_continue_label = continue_label
 	_night = night
-	_count = 5 if DUTIES.has(night) else 4
+	_require_all = require_all
+	_read.clear()
+	_count = 5 if DUTIES.has(night) and not require_all else 4
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	show_page(4 if _count==5 else 0)
 
 func show_page(index:int) -> void:
 	_page = clampi(index,0,_count-1)
+	_read[_page] = true
 	if is_instance_valid(_page_layer):
 		remove_child(_page_layer)
 		_page_layer.queue_free()
@@ -106,9 +103,21 @@ func show_page(index:int) -> void:
 	prev.disabled = _page == 0
 	var next := p.button(_page_layer,166,666,127,40,"下一页 →","RulesNextButton",show_page.bind(_page+1),2,16)
 	next.disabled = _page == _count-1
-	var confirm := p.button(_page_layer,918,663,332,48,_continue_label,"RulesContinueButton",func(): closed.emit(),0,20)
+	var missing := PackedStringArray()
+	if _require_all:
+		for i in 4:
+			if not _read.has(i):
+				missing.append(str(i+1))
+		var progress := "四页已读，可以开始试工。" if missing.is_empty() else "请翻阅第 %s 页，可直接点上方页签。"%("、".join(missing))
+		p.line(_page_layer,312,665,593,44,progress,17,Print.WHITE,0,HORIZONTAL_ALIGNMENT_LEFT,"RulesReadingProgress")
+	var confirm := p.button(_page_layer,918,663,332,48,_continue_label,"RulesContinueButton",_confirm,0,20)
+	confirm.disabled = not missing.is_empty()
 	# Opening the manual is a deliberate break. A held Enter cannot dismiss the first page.
 	confirm.focus_mode = Control.FOCUS_CLICK
+
+func _confirm() -> void:
+	if not _require_all or _read.size()==4:
+		closed.emit()
 
 class Diagram extends Control:
 	const FLOOR := preload("res://assets/night/factory/floor.png")
@@ -155,78 +164,71 @@ class Diagram extends Control:
 	func dragon_at(x:int,y:int) -> void:
 		draw_texture_rect_region(DRAGON,Rect2(x-16,y-36,32,40),Rect2(0,80,32,40))
 
-	func gate(x:int) -> void:
-		box(x-35,29,70,40,Color("#354540"))
-		for y in range(33,68,6):
-			box(x-34,y,68,2,Color("#526057"))
-
-	func exit_mark() -> void:
-		draw_rect(Rect2(220,250,40,16),MINT,false,2.0)
+	func bottle_at(x:int,y:int,echo:=false) -> void:
+		box(x-4,y-11,8,3,Print.ALERT)
+		box(x-3,y-8,6,5,Print.WHITE)
+		box(x-6,y-3,12,17,Print.TEAL)
+		box(x-4,y+2,8,5,MINT if echo else GOLD)
 
 	func _draw() -> void:
 		draw_set_transform(Vector2.ZERO,0,Vector2(size.x/480.0,size.y/288.0))
-		if page==1:
-			_gestures()
-			return
 		if page==4:
 			_equipment()
 			return
-		draw_texture_rect(FLOOR,Rect2(0,0,480,288),false)
+		box(0,0,480,288,Print.BG)
 		match page:
 			0:
-				gate(104)
-				gate(376)
+				draw_texture_rect(FLOOR,Rect2(0,0,480,288),false)
 				window_at(240,FROG,0)
-				arrow(Vector2(240,185),Vector2(240,79),GOLD)
-				arrow(Vector2(240,224),Vector2(240,254),MINT)
-				dragon_at(240,220)
-				exit_mark()
-				tag(144,190,"你 · 奶龙",GOLD)
-				draw_line(Vector2(209,199),Vector2(222,199),GOLD,1.0)
-				tag(18,190,"备用拉杆",Print.DULL,11)
-				tag(400,190,"备用拉杆",Print.DULL,11)
-				draw_line(Vector2(46,209),Vector2(46,216),Print.DULL,2.0)
-				draw_line(Vector2(434,209),Vector2(434,216),Print.DULL,2.0)
-				tag(258,78,"2 号窗台 · 点左键",GOLD)
-				tag(257,235,"南门 · 签收 3 瓶后走入",MINT)
+				box(36,160,390,12,Color("#4c594e"))
+				box(36,162,390,2,GOLD)
+				for x in range(42,426,14): box(x,166,5,2,Print.DULL)
+				draw_arc(Vector2(193,150),14,0,TAU,24,Print.WHITE,3)
+				bottle_at(130,149)
+				arrow(Vector2(147,150),Vector2(176,150),MINT)
+				dragon_at(192,201)
+				arrow(Vector2(226,143),Vector2(239,77),GOLD)
+				tag(23,108,"来瓶",MINT,13)
+				tag(222,170,"① 站白圈旁",GOLD,12)
+				tag(29,213,"② 瓶颈入圈 · 按住左键",MINT,13)
+				tag(254,67,"③ 瞄准槽口 · 松手",GOLD,12)
+				tag(237,223,"你 · 奶龙",GOLD,12)
+			1:
+				for i in 2:
+					var x := 15+i*231
+					box(x,38,216,154,Print.RIM)
+					box(x+3,41,210,148,Color("#32463e"))
+					sprite(FROG,1,48,48,Rect2(x+60,51,103,103))
+					draw_circle(Vector2(x+83,125),4,GOLD)
+					arrow(Vector2(x+22,142),Vector2(x+79,127),GOLD)
+					if i==1: arrow(Vector2(x+91,121),Vector2(x+187,94),Print.ALERT)
+					tag(x+10,204,"拦住 · 这窗可收货" if i==0 else "穿掌 · 再验另一窗",MINT if i==0 else Print.ALERT,12)
+				tag(20,10,"右键把盖弹向手掌",GOLD)
 			2:
-				gate(240)
-				window_at(104,EGG,1)
-				window_at(376,EGG,2)
-				var rail_point := Vector2(12,189)
-				dragon_at(130,225)
-				arrow(Vector2(119,220),rail_point,GOLD)
-				arrow(rail_point,Vector2(376,78),GOLD)
-				draw_circle(rail_point,4,Print.WHITE)
-				tag(20,159,"碰左墙一次",GOLD)
-				tag(284,82,"3 号窗 · 本图目标",GOLD)
+				for i in 2:
+					var y := 92+104*i
+					box(45,y,381,12,Print.RIM)
+					box(45,y+2,381,2,GOLD if i==0 else MINT)
+					for x in range(51,424,13): box(x,y+6,4,2,Print.DULL)
+				bottle_at(242,81)
+				arrow(Vector2(250,102),Vector2(353,175),Print.ALERT)
+				arrow(Vector2(337,185),Vector2(185,185),MINT)
+				draw_arc(Vector2(160,180),15,0,TAU,24,Print.WHITE,3)
+				dragon_at(155,235)
+				tag(20,28,"上层来瓶",GOLD)
+				tag(252,114,"漏接 · 滑向下层",Print.ALERT)
+				tag(165,227,"新白圈 · 可以补接",MINT)
 			3:
-				dragon_at(225,176)
-				draw_texture_rect(HAND,Rect2(300,89,34,43),false)
-				draw_rect(Rect2(34,208,24,24),GOLD,false,3.0)
-				arrow(Vector2(212,180),Vector2(48,219),GOLD)
-				arrow(Vector2(58,227),Vector2(239,258),MINT)
-				exit_mark()
-				tag(21,178,"亮杆 · 走近",GOLD)
-				tag(258,237,"南门 · 走入",MINT)
-
-	func _gestures() -> void:
-		box(0,0,480,288,Print.BG)
-		tag(22,11,"上单瓶盖   ← 左",Print.ALERT,13)
-		tag(252,11,"这次弹盖   右 →",GOLD,13)
-		for i in 2:
-			var x := 20+i*230
-			box(x,55,209,190,Print.RIM)
-			box(x+3,58,203,184,Print.COAL)
-			box(x+8,64,193,126,Color("#3c5149"))
-			sprite(FROG,2 if i==0 else 1,48,48,Rect2(x+42,72,125,125))
-			box(x+3,192,203,5,Print.MUTED_INK)
-			if i==0:
-				arrow(Vector2(x+130,159),Vector2(x+182,159),MINT)
-			else:
-				arrow(Vector2(x+75,159),Vector2(x+26,159),Print.ALERT)
-			tag(x+9,209,"1 号窗 · 手向右" if i==0 else "3 号窗 · 手向左",MINT if i==0 else Print.ALERT,13)
-		tag(20,260,"这单真伙伴在左窗，手追向右侧。",MINT,13)
+				tag(18,22,"先让瓶子录下声音",GOLD)
+				bottle_at(94,105,true)
+				arrow(Vector2(112,110),Vector2(360,110),MINT)
+				for i in 3:
+					var x := 143+i*79
+					draw_circle(Vector2(x,109),9,Print.TEAL)
+					tag(x-19,138,["脚步","管响","铃声"][i],MINT,11)
+				draw_texture_rect(HAND,Rect2(325,169,34,43),false)
+				arrow(Vector2(251,213),Vector2(330,178),Print.ALERT)
+				tag(32,239,"瓶子在带上重放，柜下的手会循声过去。",GOLD,12)
 
 	func _equipment() -> void:
 		box(0,0,480,288,Print.BG)
@@ -237,7 +239,7 @@ class Diagram extends Control:
 				box(x+3,37,133,127,Color("#314841"))
 				dragon_at(x+47+i*15,133)
 				tag(x+10,175,["现场录像","两秒延迟","旧班录像"][i],GOLD,14)
-			tag(16,228,"走两步 · 停住 · 看哪扇窗里的你迟了两秒",MINT,14)
+			tag(16,228,"认出延迟录像，再用带声的瓶把东西引开。",MINT,13)
 		elif night==7:
 			tag(18,13,"录制",GOLD)
 			box(60,64,34,20,Print.TEAL)
@@ -247,7 +249,7 @@ class Diagram extends Control:
 			tag(265,48,"站满 2 秒",GOLD)
 			tag(265,77,"左键封存",MINT)
 			box(15,115,450,2,Print.RIM)
-			tag(18,129,"第二段回放",Print.ALERT)
+			tag(18,129,"回放时拨开货槽，先送瓶",Print.ALERT)
 			box(46,191,63,25,Print.RED)
 			for x in [49,72,94]:
 				draw_circle(Vector2(x,214),6,Print.RIM)
@@ -257,7 +259,7 @@ class Diagram extends Control:
 			box(367,162,12,22,Print.RED)
 			box(358,216,29,3,GOLD)
 			tag(23,234,"左侧压辊",Print.ALERT)
-			tag(241,234,"门前按住 D / →",MINT)
+			tag(241,234,"先送瓶 · 再按 D 过闸",MINT)
 		else:
 			var points := [Vector2(240,57),Vector2(363,139),Vector2(240,225),Vector2(116,139)]
 			for i in 4:

@@ -8,7 +8,11 @@ import scala.compiletime.testing.typeCheckErrors
 final class NightEngineSuite extends FunSuite:
   private val id = UUID.fromString("12345678-0000-0000-0000-000000000001")
   private val targets = Vector(104.0, 240.0, 376.0)
-  private def make(n: Int, seed: Long = 61): NightWorld = NightEngine.start(NightLevel.from(n).get, seed)
+  // These cases exercise the counter and its pursuit in isolation. RelaySuite covers
+  // the shipping room, and the HTTP campaign test plays every normal entry point.
+  private def make(n: Int, seed: Long = 61): NightWorld =
+    val start = NightEngine.start(NightLevel.from(n).get, seed)
+    if n <= 6 then start.copy(puzzle=None) else start
   private def packet(mx: Double = 0, my: Double = 0, ax: Double = 0, ay: Double = -1, edge: String = "none"): NightInput =
     NightInput.from(mx, my, ax, ay, edge).get
   private def advance(w: NightWorld, count: Int, sample: NightInput = NightInput.idle): NightWorld =

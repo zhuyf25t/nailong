@@ -1,74 +1,31 @@
-extends SceneTree
+extends "res://tests/night_playthrough.gd"
 
-const Wire = preload("res://night/state.gd")
+const RelayAudio = preload("res://night/relay_sound.gd")
+var _saw_catch_prompt := false
+var _saw_release_prompt := false
 
-# Exercise the packaged project and a real three-delivery shift against its
-# bundled JVM/PostgreSQL. This account exists only in the verification profile.
-var http := HTTPRequest.new()
-var token := ""
-var base_url := ""
-var failed := false
-
-
+# Use the same physical inputs, route and win checks as the full campaign.
+# Stable credentials let the second process verify the unlock persisted on disk.
 func _initialize() -> void:
+	ProjectSettings.set_setting("application/config/use_custom_user_dir", true)
+	ProjectSettings.set_setting("application/config/custom_user_dir_name", "OnlyThreeOnShift-PackVerification")
+	var test_dir := ProjectSettings.globalize_path("user://").trim_suffix("/")
+	if test_dir.get_file() != "OnlyThreeOnShift-PackVerification" or DirAccess.make_dir_recursive_absolute(test_dir) != OK:
+		call_deferred("_fail", "could not isolate the verification preferences")
+		return
+	var options := test_dir.path_join("night-options.cfg")
+	if FileAccess.file_exists(options) and DirAccess.remove_absolute(options) != OK:
+		call_deferred("_fail", "could not reset the test-only rules flag")
+		return
 	call_deferred("_run")
 
 
-func _request(path: String, payload: Variant = null) -> Dictionary:
-	if failed:
-		return {}
-	var headers := PackedStringArray(["Content-Type: application/json"])
-	if not token.is_empty():
-		headers.append("Authorization: Bearer " + token)
-	var method := HTTPClient.METHOD_GET if payload == null else HTTPClient.METHOD_POST
-	var body := "" if payload == null else JSON.stringify(payload)
-	if http.request(base_url + path, headers, method, body) != OK:
-		_fail("could not start request")
-		return {}
-	var result: Array = await http.request_completed
-	var data: Variant = JSON.parse_string((result[3] as PackedByteArray).get_string_from_utf8())
-	if result[0] != HTTPRequest.RESULT_SUCCESS or int(result[1]) < 200 or int(result[1]) >= 300 or typeof(data) != TYPE_DICTIONARY:
-		_fail("request failed: %s HTTP %s" % [path, result[1]])
-		return {}
-	return data
-
-
-func _fail(reason: String) -> void:
-	failed = true
-	push_error("Distribution check failed: " + reason)
-	quit(1)
-
-
-func _uuid() -> String:
-	var data := Crypto.new().generate_random_bytes(16)
-	data[6] = (data[6] & 15) | 64
-	data[8] = (data[8] & 63) | 128
-	var s := data.hex_encode()
-	return "%s-%s-%s-%s-%s" % [s.substr(0, 8), s.substr(8, 4), s.substr(12, 4), s.substr(16, 4), s.substr(20)]
-
-
-func _wait_until(predicate: Callable) -> bool:
-	var until := Time.get_ticks_msec() + 10000
-	while not predicate.call():
-		if Time.get_ticks_msec() >= until:
-			return false
-		await create_timer(0.035).timeout
-	return true
-
-
-func _activate(client: Node, name_of_button: String) -> bool:
-	var button := client.find_child(name_of_button, true, false) as BaseButton
-	if button == null or not button.is_visible_in_tree() or button.disabled:
-		return false
-	button.pressed.emit()
-	return true
-
-
 func _check_pack() -> bool:
+	if str(ProjectSettings.get_setting("application/config/version", "")) != "4.0":
+		return _fail("the packaged game does not advertise the v4 return-line release")
 	var inventory: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://night-package-files.json"))
 	if not inventory is Array or inventory.is_empty():
-		_fail("missing exported file inventory")
-		return false
+		return _fail("missing exported file inventory")
 	for item: Variant in inventory:
 		var path := str(item)
 		if ResourceLoader.exists(path):
@@ -76,151 +33,86 @@ func _check_pack() -> bool:
 				continue
 		elif path.get_extension().to_lower() in ["json", "csv", "txt", "srt"] and FileAccess.file_exists(path):
 			continue
-		_fail("could not open packaged game resource: " + path)
-		return false
+		return _fail("could not open packaged game resource: " + path)
+	for clip: String in RelayAudio.CLIPS:
+		if not ResourceLoader.exists("res://assets/night/audio/%s.wav" % clip, "AudioStreamWAV"):
+			return _fail("missing sound used by the return line: " + clip)
 	print("Opened ", inventory.size(), " packaged client assets, scenes and scripts.")
 	return true
 
 
-func _check_rules_and_training(client: Node, account: String, password: String) -> bool:
-	var api: Node = client.get("api")
-	api.call("login", account, password)
-	if not await _wait_until(func(): return client.get("page") == "roster"):
+func _check_relay_manual() -> bool:
+	if not await _press("RulesButton"):
 		return false
-	if not _activate(client, "Night1"):
+	if not await _until(func(): return _ready_button("RulesContinueButton") and _state().get("paused", false), 8, "open the manual and pause the return line"):
 		return false
-	await process_frame
-	if not _activate(client, "StartButton"):
-		return false
-	if not await _wait_until(func(): return client.find_child("RulesManual", true, false) != null):
-		return false
-	var heading := client.find_child("RulesPageTitle", true, false) as Label
-	var accept := client.find_child("RulesContinueButton", true, false) as Button
-	var no_shift: Dictionary = api.get("current")
-	if not no_shift.is_empty() or heading == null or "第一夜" not in heading.text or accept == null or "开始试工" not in accept.text:
-		return false
-	for tab in [2,3,4,1]:
-		if not _activate(client, "RulesTab%d" % tab):
+	var paused_tick := int(_state().tick)
+	var paused_ack := int(_state().ack)
+	var frozen: Dictionary = _story().relay.duplicate(true)
+	for page in [2, 3, 4, 1]:
+		if not await _press("RulesTab%d" % page):
 			return false
-		await process_frame
-	if not _activate(client, "RulesContinueButton"):
+		var number := _find("RulesPageNumber") as Label
+		if number == null or str(page) not in number.text:
+			return _fail("the displayed rules page did not change")
+	if not await _until(func(): return int(_state().ack) > paused_ack, 4, "fresh server snapshot while reading"):
 		return false
-	if not await _wait_until(func(): return not (api.get("current") as Dictionary).is_empty() and client.get("page") == "play"):
+	if int(_state().tick) != paused_tick or frozen != _story().relay:
+		return _fail("the conveyor moved while the manual was open")
+	if not await _press("RulesContinueButton"):
 		return false
-	var ui: Control = client.get("ui")
-	var instruction := ui.find_child("TaskValue", true, false) as Label
-	var objective := ui.find_child("PhaseValue", true, false) as Label
-	var counter := ui.find_child("OrderValue", true, false) as Label
-	var inspection := ui.find_child("InspectionRecord", true, false) as CanvasItem
-	var pressure := ui.find_child("PressureGauge", true, false) as CanvasItem
-	var lever_note := ui.find_child("IdleLeverNote", true, false) as Label
-	var speaker := ui.find_child("SubtitleSpeaker", true, false) as Label
-	var subtitle := ui.find_child("SubtitleText", true, false) as Label
-	var story: Dictionary = (api.get("current") as Dictionary).get("story", {})
-	if story.get("room") != "factory" or story.get("cue") != "warm" \
-		or speaker == null or not speaker.is_visible_in_tree() or "奶蛙" not in speaker.text \
-		or subtitle == null or not subtitle.is_visible_in_tree() or "点左键" not in subtitle.text:
-		_fail("the opening server cue or the default Chinese subtitles are missing")
-		return false
-	var valid := instruction != null and instruction.is_visible_in_tree() and "2 号窗" in instruction.text \
-		and "左键" in instruction.text and objective != null and objective.text == "送第 1 瓶" \
-		and counter != null and counter.text == "0 / 3" and inspection != null \
-		and not inspection.is_visible_in_tree() and pressure != null and not pressure.is_visible_in_tree() \
-		and lever_note != null and lever_note.is_visible_in_tree() and "平时不用" in lever_note.text
-	if not valid or not _activate(client, "RulesButton"):
-		return false
-	if not await _wait_until(func(): return (api.get("current") as Dictionary).get("paused", false)):
-		return false
-	var paused: Dictionary = api.get("current")
-	var run_path := "/v1/night/run/%s" % paused.runId
-	await create_timer(0.35).timeout
-	var server_copy := await _request(run_path)
-	if failed or not server_copy.get("paused", false) or int(server_copy.get("tick",-1)) != int(paused.tick):
-		return false
-	if not _activate(client, "RulesContinueButton"):
-		return false
-	if not await _wait_until(func(): return not (api.get("current") as Dictionary).get("paused", true)):
-		return false
-	api.call("logout")
-	return true
+	return await _until(func(): return not _state().get("paused", true) and int(_state().tick) > paused_tick, 5, "resume the return line")
+
+
+func _observe_ticket() -> void:
+	var key := _find("RelayKey") as Label
+	if key != null and key.is_visible_in_tree():
+		_saw_catch_prompt = _saw_catch_prompt or key.text == "现在按住左键"
+		_saw_release_prompt = _saw_release_prompt or key.text == "瞄准后松开左键"
 
 
 func _run() -> void:
-	# The first-time rules flag belongs to the actual player. Exercise it in
-	# a disposable Godot profile even if the user has the real game open.
-	ProjectSettings.set_setting("application/config/use_custom_user_dir", true)
-	ProjectSettings.set_setting("application/config/custom_user_dir_name", "OnlyThreeOnShift-PackVerification")
-	var test_dir := ProjectSettings.globalize_path("user://").trim_suffix("/")
-	if test_dir.get_file() != "OnlyThreeOnShift-PackVerification" or DirAccess.make_dir_recursive_absolute(test_dir) != OK:
-		_fail("could not isolate the first-time UI profile")
+	if not _check_pack():
 		return
-	var options := test_dir.path_join("night-options.cfg")
-	if FileAccess.file_exists(options) and DirAccess.remove_absolute(options) != OK:
-		_fail("could not reset the test-only rules flag")
-		return
-	base_url = OS.get_environment("SODA_API_URL")
-	var scene: PackedScene = load("res://main.tscn")
+	var scene := load("res://main.tscn") as PackedScene
 	if scene == null:
 		_fail("missing main scene")
 		return
-	if not _check_pack():
-		return
-	var client := scene.instantiate()
-	root.add_child(client)
-	root.add_child(http)
-	http.timeout = 5.0
-	var account := OS.get_environment("NIGHT_VERIFY_ACCOUNT")
-	var password := OS.get_environment("NIGHT_VERIFY_PASSWORD")
-	if account.is_empty() or password.is_empty():
+	app = scene.instantiate()
+	root.add_child(app)
+	await process_frame
+	app.get("api").connect("notice", func(msg: String): last_notice = msg)
+	account_name = OS.get_environment("NIGHT_VERIFY_ACCOUNT")
+	account_password = OS.get_environment("NIGHT_VERIFY_PASSWORD")
+	if account_name.is_empty() or account_password.is_empty():
 		_fail("test credentials were not provided by the launcher")
 		return
-	var login: Dictionary = await _request("/v1/sessions", {"name":account,"password":password})
-	if failed:
+	if not await _login():
 		return
-	token = str(login.get("token", ""))
-	if not await _check_rules_and_training(client, account, password):
-		_fail("failed first-time rules, four pages, first-shift targets or live pause/resume")
+	var cleared: Array = _profile().get("cleared", [])
+	if OS.get_environment("NIGHT_VERIFY_EXISTING") == "1" and 1 not in cleared:
+		_fail("completed return-line shift was lost after relaunch")
 		return
-	var profile := Wire.profile(await _request("/v1/night/profile"))
-	if failed:
+	if not await _enter_night(1):
 		return
-	if OS.get_environment("NIGHT_VERIFY_EXISTING") == "1" and 1 not in profile.get("cleared", []):
-		_fail("completed shift was lost between launches")
+	if not _story().get("relay") is Dictionary or (_story().relay as Dictionary).is_empty():
+		_fail("this is not the return-line campaign")
 		return
-	var view: Dictionary = await _request("/v1/night/start", {"night":1,"requestId":_uuid()})
-	if failed:
+	var first_step := _find("RelayStep") as Label
+	if first_step == null or not first_step.is_visible_in_tree() or first_step.text != "走到接瓶圈":
+		_fail("first-shift ticket does not show where to intercept the bottle")
 		return
-	var endpoint := "/v1/night/run/%s/input" % view.get("runId", "")
-	var fired_order := 0
-	var seq := 0
-	var deadline := Time.get_ticks_msec() + 30000
-	while Time.get_ticks_msec() < deadline and not failed:
-		var phase := str(view.get("phase", ""))
-		if phase == "won":
-			break
-		if phase not in ["serving","clockout"]:
-			_fail("unexpected phase: " + phase)
-			return
-		var action := "none"
-		var dy := 0
-		if phase == "serving" and int(view.get("order", 0)) > fired_order:
-			fired_order = int(view.order)
-			action = "throw"
-		elif phase == "clockout":
-			dy = 1
-		view = await _request(endpoint, {"seq":seq,"mx":0,"my":dy,"ax":0,"ay":-1,"action":action})
-		seq += 1
-		await create_timer(0.07).timeout
-	if failed:
+	if not await _until(_has_caption, 4, "visible opening Chinese caption and speaker"):
 		return
-	if view.get("phase", "") != "won":
-		_fail("the deliveries did not finish")
+	if not await _check_relay_manual():
 		return
-	profile = Wire.profile(await _request("/v1/night/profile"))
-	if failed:
+	process_frame.connect(_observe_ticket)
+	if not await _training_orders():
 		return
-	if 1 not in profile.get("cleared", []) or int(profile.get("unlocked", 0)) < 2:
-		_fail("the result was not saved: %s" % str(profile))
+	process_frame.disconnect(_observe_ticket)
+	if not _saw_catch_prompt or not _saw_release_prompt:
+		_fail("the new courier did not see both catch and release instructions")
 		return
-	print("Distribution check PASS: package resources, mandatory rules, four pages, Chinese subtitles, server pause/resume, first-shift instructions, three real deliveries, saved unlock.")
-	quit(0)
+	if not await _win(1):
+		return
+	await _finish("Distribution check PASS: relay-v4, resources, four rules pages, Chinese captions, frozen conveyor, physical catch and release, return catch, saved unlock.")

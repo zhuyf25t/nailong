@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import subprocess
 import uuid
@@ -45,6 +46,37 @@ def copy_file(source, target):
     shutil.copy2(source, target)
 
 
+def collect_referenced_files(game, project):
+    # Follow literal Godot resource paths from scenes and scripts, including test
+    # helpers. Dynamically selected art and audio live in the copied asset tree.
+    text_formats = {".gd", ".tscn", ".tres", ".gdshader", ".godot"}
+    references = re.compile(r"""["']res://([\w ./-]+\.[\w]+)["']""")
+    pending = [p for p in project.rglob("*") if p.is_file() and p.suffix in text_formats]
+    visited = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        for raw in references.findall(path.read_text("utf-8-sig")):
+            name = PurePosixPath(raw)
+            if ".." in name.parts or name.is_absolute():
+                raise RuntimeError(f"Invalid Godot resource path {raw} in {path.name}")
+            dest = project / name
+            if dest.is_file() or raw == "night-package-files.json":
+                continue
+            source = game / name
+            if not source.is_file():
+                raise RuntimeError(f"Missing resource referenced by {path.name}: res://{raw}")
+            copy_file(source, dest)
+            for suffix in (".uid", ".import"):
+                companion = source.with_name(source.name + suffix)
+                if companion.is_file():
+                    copy_file(companion, dest.with_name(dest.name + suffix))
+            if dest.suffix in text_formats:
+                pending.append(dest)
+
+
 def make_project(engine, target, app):
     game = REPO / "game"
     project = target / "export-project"
@@ -53,14 +85,19 @@ def make_project(engine, target, app):
         copy_file(game / name, project / name)
     for name in ["night", "assets/night"]:
         shutil.copytree(game / name, project / name)
-    for name in ["night/story_ui.gd", "night/story_world.gd", "assets/night/horror/woodcut_screen.png",
+    for name in ["night/relay_world.gd", "night/relay_ticket.gd", "night/relay_sound.gd",
+                 "assets/night/relay/cargo.png", "assets/night/relay/echo.png", "assets/night/relay/pipe_rivet.png",
+                 "assets/night/relay/label_hand.png", "assets/night/relay/near_glass.png",
+                 "night/story_ui.gd", "night/story_world.gd", "assets/night/horror/woodcut_screen.png",
                  "assets/night/horror/frog_ring.png", "assets/night/horror/ending_dawn.png",
                  "assets/night/audio/sleep_gallery.wav", "assets/night/audio/dawn.wav"]:
         if not (project / name).is_file():
             raise RuntimeError(f"Missing eight-night campaign resource: {name}")
     copy_file(game / "tests/night_playthrough.gd", project / "tests/night_playthrough.gd")
-    copy_file(game / "tests/night_chapters.gd", project / "tests/night_chapters.gd")
     copy_file(TOOLS / "distribution_check.gd", project / "tests/distribution_check.gd")
+    collect_referenced_files(game, project)
+    if not (project / "tests/night_relay.gd").is_file():
+        raise RuntimeError("The eight-night driver does not include the v4 return-line tests.")
     assets = sorted("res://" + p.relative_to(project).as_posix() for p in project.rglob("*")
                     if p.is_file() and p.suffix.lower() not in {".uid", ".import", ".godot"})
     (project / "night-package-files.json").write_text(json.dumps(assets, ensure_ascii=False), "utf-8")
@@ -101,26 +138,32 @@ def make_server(app, use_classes):
     backend = REPO / "backend"
     if not use_classes:
         run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-             backend / "build.ps1", "-Tasks", "prepareLaunch"])
-    entries = [Path(x) for x in (backend / "target/runtime-classpath.txt").read_text("utf-8").strip().split(os.pathsep)]
-    classes = [p for p in entries if p.is_dir()]
-    if len(classes) != 1 or not (classes[0] / "soda/night").is_dir():
-        raise RuntimeError("The compiled night-shift backend was not found on the runtime classpath.")
+             backend / "build.ps1", "-Tasks", "prepareServer"])
+    entries = [Path(x) for x in (backend / "target/runtime-server-classpath.txt").read_text("utf-8").strip().split(os.pathsep)]
+    official = entries[0]
+    if official.parent.resolve() != (backend / ".night-runtime/versions").resolve() or sha256(official) != official.stem:
+        raise RuntimeError("prepareServer did not supply a valid immutable game service JAR.")
     server = app / "server/lib"
     server.mkdir(parents=True)
-    with ZipFile(server / "night-service.jar", "w", ZIP_DEFLATED) as archive:
-        for path in sorted(classes[0].rglob("*.class")):
-            archive.write(path, path.relative_to(classes[0]).as_posix())
+    copy_file(official, server / "night-service.jar")
+    with ZipFile(official) as archive:
+        archive.getinfo("soda/night/Relay.class")
+        for directory in (p for p in entries[1:] if p.is_dir()):
+            # sbt also lists the project's own exploded classes. The frozen JAR
+            # already contains them. Refuse an unbundled or newer class tree.
+            if directory.name != "classes" or directory.parent.parent.resolve() != (backend / "target").resolve():
+                raise RuntimeError(f"Unexpected Java class directory: {directory}")
+            for compiled in directory.rglob("*.class"):
+                if archive.read(compiled.relative_to(directory).as_posix()) != compiled.read_bytes():
+                    raise RuntimeError("Compiled classes have changed since prepareServer.")
         resources = backend / "src/main/resources"
         for source in sorted(path for path in resources.rglob("*") if path.is_file()):
-            name = source.relative_to(resources)
-            compiled = classes[0] / name
-            if not compiled.is_file() or sha256(compiled) != sha256(source):
-                raise RuntimeError(f"Run prepareLaunch to refresh the backend resource {name}.")
-            archive.write(compiled, name.as_posix())
+            name = source.relative_to(resources).as_posix()
+            if archive.read(name) != source.read_bytes():
+                raise RuntimeError(f"Run prepareServer to refresh the backend resource {name}.")
     libs = []
-    for jar in [p for p in entries if p.is_file()]:
-        if jar.suffix.lower() != ".jar" or (server / jar.name).exists():
+    for jar in (p for p in entries[1:] if not p.is_dir()):
+        if not jar.is_file() or jar.suffix.lower() != ".jar" or (server / jar.name).exists():
             raise RuntimeError(f"Unexpected or duplicate Java dependency: {jar.name}")
         copy_file(jar, server / jar.name)
         maven = next((p for p in jar.parents if p.name == "maven2"), None)
@@ -232,7 +275,7 @@ def main():
     default_jdk = WORKSPACE / "nailong/.tools/jdk-21"
     parser.add_argument("--jdk", type=Path, default=default_jdk if default_jdk.is_dir() else Path(os.getenv("JAVA_HOME", ".")))
     parser.add_argument("--output", type=Path, default=WORKSPACE / "output/night-shift")
-    parser.add_argument("--use-compiled", action="store_true", help="Use the existing prepareLaunch classpath.")
+    parser.add_argument("--use-compiled", action="store_true", help="Use the JAR and classpath frozen by prepareServer.")
     parser.add_argument("--runtime-from", type=Path, metavar="ZIP",
                         help="Reuse only Java/PostgreSQL and their licenses from a checksum-verified release.")
     parser.add_argument("--keep-staging", action="store_true", help="Keep this run's new staging directory for verification.")

@@ -39,7 +39,8 @@ final class NightBoundarySuite extends FunSuite:
   test("safe retries preserve tap order and original aim across a later idle sample") {
     val left = sample(-1,"probe")
     val right = sample(1,"probe")
-    val accepted = shift.submit(sequence(0),left,0).toOption.get
+    val initial = shift
+    val accepted = initial.copy(world=initial.world.copy(puzzle=None)).submit(sequence(0),left,0).toOption.get
       .submit(sequence(1),right,0).toOption.get
       .submit(sequence(2),NightInput.idle,0).toOption.get
       .submit(sequence(1),left,0).toOption.get
@@ -63,7 +64,8 @@ final class NightBoundarySuite extends FunSuite:
   }
   test("rules pause freezes a thrown bottle, pressure, gestures and walking until the next live tick") {
     val toss = sample(0,"throw",1)
-    val flying = shift.submit(sequence(0),toss,0).toOption.get.advance(1)
+    val initial = shift
+    val flying = initial.copy(world=initial.world.copy(puzzle=None)).submit(sequence(0),toss,0).toOption.get.advance(1)
     assert(flying.snapshot.hcursor.downField("bottle").focus.exists(!_.isNull))
     val queued = flying.submit(sequence(1),sample(1,"probe",1),1).toOption.get
     val paused = queued.submit(sequence(2),sample(1,"pause",1),1).toOption.get
@@ -110,4 +112,25 @@ final class NightBoundarySuite extends FunSuite:
     val released = refreshed.submit(sequence(2),NightInput.idle,4).toOption.get
     assertEquals(released.held.action,NightAction.Idle)
     assert(parseInput(raw.replace("probe","hold")).nonEmpty)
+  }
+
+  test("a physical catch, cap flick and release keep their own aim across retries") {
+    val down = sample(-1,"catch")
+    val flick = sample(1,"probe")
+    val up = sample(0,"release")
+    val queued = shift.submit(sequence(1),down,0).toOption.get
+      .submit(sequence(2),flick,0).toOption.get.submit(sequence(3),up,0).toOption.get
+      .submit(sequence(2),up,0).toOption.get
+    assertEquals(queued.actions.map(i => (i.action,i.ax)).toVector,
+      Vector((NightAction.Catch,-1.0),(NightAction.Probe,1.0),(NightAction.Release,0.0)))
+    assertEquals(queued.held.action,NightAction.Idle)
+    assertEquals(queued.advance(1).actions.size,2)
+    assert(parseInput(raw.replace("probe","release")).nonEmpty)
+  }
+
+  test("recorded audio preserves rhythm, rejects invalid sound types and stale negative intervals") {
+    assertEquals(NightJournal.readSounds("""[["step",0],["pipe",13],["bell",29]]"""),
+      Vector(EchoBeat(EchoKind.Step,0),EchoBeat(EchoKind.Pipe,13),EchoBeat(EchoKind.Bell,29)))
+    intercept[IllegalStateException](NightJournal.readSounds("""[["step",-2]]"""))
+    intercept[IllegalStateException](NightJournal.readSounds("""[["unknown",3]]"""))
   }

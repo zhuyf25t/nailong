@@ -1,11 +1,9 @@
 package soda.night
 
-import java.util.UUID
 import munit.FunSuite
 import scala.compiletime.testing.typeCheckErrors
 
 final class StoryPuzzlesSuite extends FunSuite:
-  private val runId = new UUID(0,42)
   private def story(w: NightWorld): StoryView = StoryPuzzles.view(w,w.puzzle.get)
   private def make(n: Int, seed: Long = 0, tape: Vector[NightPoint] = Vector.empty): NightWorld =
     NightEngine.start(NightLevel.from(n).get,seed,tape)
@@ -22,30 +20,79 @@ final class StoryPuzzlesSuite extends FunSuite:
     Iterator.iterate(w)(move).take(180).find(now => now.player.distance(to) < 0.1 || until(now))
       .getOrElse(fail(s"Cannot reach $to from ${w.player}, ${w.puzzle.map(_ => story(w).step)}"))
   private def locate(w: NightWorld,kind: String): NightPoint =
-    val m = story(w).marks.find(_.kind == kind).getOrElse(fail(s"$kind absent from ${story(w).marks}"))
+    val m = story(w).marks.find(m => m.kind == kind || kind == "plate" && m.kind == "plate_on")
+      .getOrElse(fail(s"$kind absent from ${story(w).marks}"))
     NightPoint(m.x,m.y)
   private def activate(w: NightWorld,kind: String): NightWorld = click(walk(w,locate(w,kind)))
 
-  // Read the same window reaction a Godot client sees, then shoot the physical bottle.
-  private def deliver(w: NightWorld): NightWorld =
-    val (direction,ax) = if w.memory == Direction.Left then ("right",1.0) else ("left",-1.0)
-    val observed = ticks(NightEngine.step(w,NightInput.from(0,0,ax,0,"probe").get),12)
-    val windows = NightWire.snapshot(observed,runId,0).hcursor.get[Vector[io.circe.Json]]("windows").toOption.get
-    val finger = windows.filter(_.hcursor.get[String]("look").toOption.contains(direction))
-    assertEquals(finger.size,1)
-    val x = Vector(104,240,376)(finger.head.hcursor.get[Int]("slot").toOption.get)
-    val dx = x - observed.player.x
-    val dy = 78 - observed.player.y
-    val scale = math.hypot(dx,dy)
-    val shot = NightEngine.step(observed,NightInput.from(0,0,dx/scale,dy/scale,"throw").get)
-    Iterator.iterate(shot)(NightEngine.step(_,NightInput.idle)).take(50)
-      .find(_.delivered == w.delivered+1).getOrElse(fail("Bottle never reached the responding window"))
+  // RelayTestPlayer reads only the tracks, circles and glass reactions shown to the player.
+  private def playParcel(start: NightWorld,done: NightWorld => Boolean): NightWorld =
+    def advance(w: NightWorld): NightWorld = w.puzzle.get.scene match
+      case RelayRoom(r,_) => NightEngine.step(w,RelayTestPlayer.next(w,r))
+      case other => fail(s"Unexpected scene before delivery: $other")
+    @scala.annotation.tailrec
+    def drive(w: NightWorld,left: Int): NightWorld =
+      if done(w) then w
+      else if left == 0 then
+        val v = story(w)
+        fail(s"Unfinished night ${start.night.value} order ${start.order}: ${w.player}, ${v.cue}, ${v.relay.map(_.json.noSpaces)}")
+      else drive(advance(w),left-1)
+    drive(start,2600)
+  private def deliver(w: NightWorld): NightWorld = playParcel(w,_.delivered > w.delivered)
+
   private def observe(seed: Int,tape: Vector[NightPoint]): NightWorld =
     val first = deliver(make(6,seed,tape))
-    assert(first.puzzle.isEmpty)
+    assertEquals(story(first).step,"relay_dispatch")
     val second = deliver(first)
     assertEquals(story(second).step,"enter_hatch")
     activate(second,"hatch")
+
+  test("first night signs three physical parcels, walks to the south door and replays its own final sound gaps") {
+    val run = make(1)
+    val third = deliver(deliver(deliver(run)))
+    assertEquals(third.delivered,3)
+    assertEquals(story(third).step,"clockout_walk")
+    assert(third.firstNightSounds.nonEmpty)
+    val roll = walk(third,locate(third,"exit"),w => story(w).step == "fourth_bottle")
+    val sequence = Iterator.iterate(roll)(NightEngine.step(_,NightInput.idle)).take(900)
+      .takeWhile(_.phase != NightPhase.Won).toVector
+    assertEquals(story(sequence.head).people.head.kind,"empty_bottle")
+    val cues = sequence.sliding(2).flatMap {
+      case Vector(a,b) if story(a).cueId != story(b).cueId => story(b).marks.map(m => (b.tick,m.kind))
+      case _ => Vector.empty
+    }.toVector
+    assertEquals(cues.map(_._2),third.firstNightSounds.map(b => "echo_"+b.kind.wire))
+    assertEquals(cues.sliding(2).collect { case Vector(a,b) => b._1-a._1 }.toVector,
+      third.firstNightSounds.drop(1).map(_.gap))
+    assertEquals(NightEngine.step(sequence.last,NightInput.idle).phase,NightPhase.Won)
+  }
+
+  test("one replay frame can contain both a footstep and a pipe strike") {
+    val base = make(1)
+    val beats = Vector(EchoBeat(EchoKind.Step,0),EchoBeat(EchoKind.Pipe,0),EchoBeat(EchoKind.Bell,7))
+    val roll = base.copy(puzzle=Some(base.puzzle.get.enter(FourthBottle(beats),"fourth_roll")))
+    val first = ticks(roll,12)
+    assertEquals(story(first).marks.map(_.kind),Vector("echo_step","echo_pipe"))
+    assertEquals(story(first).fourthSounds,beats)
+    assertEquals(story(ticks(first,6)).cueId,story(first).cueId)
+    assertEquals(story(ticks(first,7)).marks.map(_.kind),Vector("echo_bell"))
+  }
+
+  test("night three broken loading tiles rewind only the current parcel and keep its dirty receipt") {
+    val run = make(3)
+    val tile = story(run).tiles.minBy(t => run.player.distance(NightPoint(t.x,t.y)))
+    val onTile = walk(run,NightPoint(tile.x,tile.y))
+    assert(story(onTile).tiles.exists(t => t.x == tile.x && t.y == tile.y && t.state == StoryTileState.Warn))
+    val slipped = Iterator.iterate(onTile)(NightEngine.step(_,NightInput.idle)).take(24)
+      .find(w => story(w).cue == "tile_fall").get
+    assertEquals(slipped.player,NightPoint(240,220))
+    assertEquals(slipped.delivered,0)
+    assert(story(slipped).relay.get.tick > story(onTile).relay.get.tick)
+    assert(story(slipped).relay.get.events.last.id > story(onTile).relay.get.events.last.id)
+    assert(story(slipped).tiles.exists(_.state == StoryTileState.Hole))
+    val signed = deliver(slipped)
+    assertEquals((signed.delivered,signed.clean),(1,0))
+  }
 
   test("a probe lasts six ticks and identifies the real forty-tick delay in all six window layouts") {
     val tape = Vector(NightPoint(220,189),NightPoint(213,204),NightPoint(332,218))
@@ -90,7 +137,9 @@ final class StoryPuzzlesSuite extends FunSuite:
     val atWall = ticks(above,60,NightInput.from(1,0,0,-1,"none").get)
     assert(atWall.player.x < 276)
     assertEquals(story(atWall).step,"delay_door")
-    val plate = walk(atWall,locate(relay,"plate"))
+    val parcelDone = playParcel(atWall,w => story(w).relay.isEmpty)
+    assertEquals(story(parcelDone).step,"delay_door")
+    val plate = walk(parcelDone,locate(parcelDone,"plate"))
     val held = ticks(plate,38)
     val crossing = walk(held,NightPoint(281,178))
     assertEquals(story(crossing).step,"old_turn")
@@ -99,7 +148,10 @@ final class StoryPuzzlesSuite extends FunSuite:
     assertEquals(story(ticks(turn,29)).people.head.kind,"archive_turn")
     val exit = ticks(turn,30)
     assertEquals(story(exit).step,"exit_maintenance")
-    val won = walk(exit,locate(exit,"exit"),_.phase == NightPhase.Won)
+    assertEquals(story(ticks(exit,28)).people.head.x,story(exit).people.head.x)
+    val leaving = walk(exit,NightPoint(393,198))
+    assert(story(ticks(leaving,16)).people.head.x > story(exit).people.head.x)
+    val won = walk(leaving,locate(leaving,"exit"),_.phase == NightPhase.Won)
     assertEquals(won.phase,NightPhase.Won)
     assertEquals(ticks(won,100),won)
   }
@@ -113,8 +165,9 @@ final class StoryPuzzlesSuite extends FunSuite:
     val replay = recordPlate(firstPanel,80)
     walk(replay,NightPoint(240,174),w => story(w).step == "record_two")
   private def passSecondGate(replay: NightWorld): NightWorld =
-    val above = walk(replay,NightPoint(319,145))
-    val around = walk(above,NightPoint(350,145))
+    val shipped = playParcel(replay,w => story(w).relay.isEmpty)
+    assertEquals(story(shipped).step,"play_two")
+    val around = if shipped.player.x < 349 then walk(shipped,NightPoint(350,145)) else shipped
     walk(around,NightPoint(428,164),w => story(w).step == "help_hold")
 
   test("seal only after two continuous seconds on the plate; an early click keeps the tape running") {
@@ -173,8 +226,8 @@ final class StoryPuzzlesSuite extends FunSuite:
     val onBrick = walk(lowerTip,NightPoint(338,198))
     assert(story(onBrick).tiles.exists(_.state == StoryTileState.Warn))
     val offBrick = walk(onBrick,NightPoint(350,183))
-    val shortCut = walk(offBrick,NightPoint(428,164),w => story(w).step == "help_hold")
-    assertEquals(story(shortCut).step,"help_hold")
+    assertEquals(story(offBrick).step,"play_two")
+    assert(offBrick.player.x > 349,"The lower approach clears the divider while the parcel is on the rail")
     val longTape = replay
     val assist = passSecondGate(longTape)
     assert(assist.tick-longTape.tick >= 85,"The extra hold starts only after the player's recording has ended")

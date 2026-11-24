@@ -45,7 +45,7 @@ object Main extends IOApp.Simple:
     val health = HttpRoutes.of[IO] { case GET -> Root / "health" =>
       db.transaction(c => Sql.statement(c,"SELECT 1")(s => Sql.first(s)(_.getInt(1)))).attempt.flatMap {
         case Right(Some(1)) => Ok(Json.obj("status" -> Json.fromString("ok"), "game" -> Json.fromString("nightshift"),
-          "rulesPause" -> Json.True, "storyCampaign" -> Json.fromInt(3)))
+          "rulesPause" -> Json.True, "storyCampaign" -> Json.fromInt(4)))
         case _ => Http.error(Status.ServiceUnavailable,"db_unavailable","数据库暂时不可用。")
       }
     }

@@ -3,6 +3,7 @@ extends RefCounted
 ## Drives the same room markers, moving window images, floor warnings and buttons
 ## available to the player. The host sends physical input through the main scene.
 var h: SceneTree
+var first_guard := Vector2.INF
 
 func _init(host: SceneTree) -> void:
 	h = host
@@ -85,6 +86,7 @@ func maintenance() -> bool:
 	if await _observe_delay() < 0: return false
 	_interact()
 	if not await _wait_step("delay_door"): return false
+	if not await h.relay_driver.maintenance(): return false
 	if not await _near_mark("plate") or not await _ticks(44): return false
 	var gate: Dictionary = h._marker("gate")
 	if gate.is_empty(): gate = h._marker("gate_open")
@@ -136,9 +138,10 @@ func _upper_aisle() -> bool:
 	# rewinds the sealed tape, so the same route can be tried immediately.
 	if not await h._until(func(): return h._story().get("cue") == "press_caught", 5, "a stationary courier is caught by the press"): return false
 	if _step() != "play_two" or h._marker("route_arrow").is_empty(): return h._fail("being caught should replay the marked route without another recording")
+	var warned: bool = not h._marker("press_warn").is_empty()
+	if not await h.relay_driver.signature(): return false
 	var limit := Time.get_ticks_msec() + 12000
 	var segment := 0
-	var warned := false
 	var first_shadow := Vector2.INF
 	var moving_shadow := false
 	var held := KEY_NONE
@@ -223,14 +226,27 @@ func _watch() -> Vector2:
 	var last: Vector2 = h._point(revealed[0])
 	# Test the early cap and throw inside the same interaction radius as a valid
 	# wake-up delivery. A click from the middle of the room would prove nothing.
-	if not await h._walk(last, 15, "approach the uncovered window before lights-out"): return Vector2.INF
+	if not first_guard.is_finite():
+		if not await h._walk(last, 15, "approach the uncovered window before lights-out"): return Vector2.INF
+	else:
+		if not await h._walk(first_guard, 8, "return to the first lever seen on the previous rotation"): return Vector2.INF
 	if not await _wait_step("sleep_watch", 5): return Vector2.INF
 	var total := int(h._story().sleepMax)
 	var last_tick := -1
 	var braced_stations: Dictionary = {}
 	var held := false
+	var last_grip := -100
 	var tested_early := false
-	var deadline := Time.get_ticks_msec() + 50000
+	var finished_station := false
+	var saw_lure := false
+	var switched := false
+	var catches := 0
+	var catch_down := false
+	var last_down := -100
+	var last_probe := -100
+	var last_ward_event := -1
+	var previous_control := ""
+	var deadline := Time.get_ticks_msec() + 80000
 	while _step() == "sleep_watch":
 		if Time.get_ticks_msec() > deadline: h._fail("watch timer stopped"); return Vector2.INF
 		var tick := int(h._state().tick)
@@ -249,15 +265,39 @@ func _watch() -> Vector2:
 			h._click_world(last, MOUSE_BUTTON_LEFT)
 			tested_early = true
 		if not _actors("wake_look").is_empty(): h._fail("a sleeping window responded to early input"); return Vector2.INF
+		var relay: Dictionary = h.relay_driver.view()
+		for event: Dictionary in relay.get("events",[]):
+			if int(event.id) > last_ward_event:
+				last_ward_event = int(event.id)
+				if event.kind == "catch": catches += 1
+				if event.kind == "switch": switched = true
+		if relay.get("stage") == "complete" and not finished_station:
+			finished_station = true
+			print("Ward logistics signed during sleep: round ",story.round," remaining ",story.sleepTicks," catches ",catches)
+			if int(story.sleepTicks) <= 0: h._fail("logistics was completed after the wake bell"); return Vector2.INF
+		var listener: Dictionary = h._marker("lured_pane")
+		if int(story.round) == 3 and not listener.is_empty():
+			if h._point(listener).distance_to(last) < 24: h._fail("the true frog reacted to a decoy bottle"); return Vector2.INF
+			saw_lure = true
+			await h._capture("12-frog-lure")
+		elif int(story.round) == 2 and not listener.is_empty():
+			await h._capture("12-frog-switch")
 		var brace: Dictionary = h._marker("brace")
+		if not brace.is_empty() and not first_guard.is_finite():
+			first_guard = h._point(brace)
 		var full: Dictionary = h._marker("brace_on")
 		if not full.is_empty(): braced_stations[h._point(full)] = true
 		var hand := h._marker("hand_warn") as Dictionary
 		if hand.is_empty(): hand = h._marker("hand")
-		var danger: bool = not hand.is_empty() and h._point(hand).distance_to(h._position()) < 25
+		var danger: bool = not hand.is_empty() and h._point(hand).distance_to(h._position()) < (32 if hand.kind == "hand" else 25)
+		var status := "%d/%s/%s/%s" % [story.round, brace.get("x","-"), full.get("x","-"), danger]
+		if status != previous_control or (held and int(story.stageTick) % 20 == 0):
+			print("Ward guard ", status, " age=", story.stageTick, " player=", h._position(), " grip=", story.braceTicks, " relay=", h.relay_driver.view().get("stage","-"))
+			previous_control = status
 		if danger:
 			if held: _mouse_held(false); held = false
-			var away: Vector2 = Vector2(240,202) - h._point(hand)
+			var away: Vector2 = h._position()-h._point(hand)
+			if away.length() < 5: away = Vector2(240,202)-h._point(hand)
 			if away.length() < 2: away = Vector2.RIGHT
 			h._direction(away.normalized()*32)
 		elif not brace.is_empty() and not braced_stations.has(h._point(brace)):
@@ -266,15 +306,61 @@ func _watch() -> Vector2:
 				h._direction(station - h._position())
 			else:
 				h._release_keys()
-				if not held: _mouse_held(true); held = true
+				if not held:
+					_mouse_held(true)
+					held = true
+					last_grip = tick
+				elif int(story.braceTicks) == 0 and tick-last_grip >= 8:
+					# A real window losing focus releases its grip. Start a new physical
+					# press only when the lever's visible progress has stayed empty.
+					print("Ward lever re-grip after zero progress at ",h._position())
+					_mouse_held(false)
+					_mouse_held(true)
+					last_grip = tick
 		else:
-			h._release_keys()
 			if held: _mouse_held(false); held = false
+			if relay.get("stage") == "running" and relay.leg == "frog_switch":
+				h._release_keys()
+				if not switched and relay.cap == null and tick-last_probe >= 12:
+					h._click_world(h._point(relay["switch"]), MOUSE_BUTTON_RIGHT)
+					last_probe = tick
+			elif relay.get("stage") == "running" and relay.leg == "frog_lure":
+				var bottle: Dictionary = relay.bottles[0]
+				var intercept := Vector2(bottle.catchX,bottle.catchY)
+				match str(bottle.state):
+					"inbound","loop","lower":
+						# Let the listener target a footprint beside the ring. With four
+						# pixels of travel per tick eight frames cover this final step.
+						var waiting := intercept + Vector2(-23,0) if int(bottle.eta) > 8 else intercept
+						h._direction(waiting-h._position())
+						if bottle.catchable and not catch_down:
+							h.relay_driver._mouse(true,intercept)
+							catch_down = true
+							last_down = tick
+						elif catch_down and tick-last_down >= 5:
+							h.relay_driver._mouse(false,intercept)
+							catch_down = false
+					"held":
+						h._release_keys()
+						if not bottle.sounds.is_empty():
+							h.relay_driver._mouse(false,h._point(relay.inlet))
+							catch_down = false
+						else:
+							h._direction(Vector2(18,0))
+					_:
+						h._release_keys()
+			else:
+				h._release_keys()
+				if catch_down:
+					h.relay_driver._mouse(false,h._position()+Vector2.UP*10)
+					catch_down = false
 		if total-int(story.sleepTicks) >= 100: await h._capture("11-shutter-swap")
 		await h.process_frame
 	if held: _mouse_held(false)
 	h._release_keys()
 	if braced_stations.size() != int(h._story().round) or not tested_early or _step() != "wake_probe": h._fail("finish guarding the sleeping frog"); return Vector2.INF
+	if int(h._story().round) > 1 and not finished_station: h._fail("the final guard round left its relay unsigned"); return Vector2.INF
+	if int(h._story().round) == 3 and (not saw_lure or catches < 2): h._fail("the recorded bottle must lure a false window and be caught a second time"); return Vector2.INF
 	return last
 
 func _wake(tracked: Vector2, deliberate_error: bool) -> bool:

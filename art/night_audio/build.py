@@ -186,9 +186,11 @@ def foley():
 
 if __name__ == "__main__":
     from story import build_story
+    from relay import build_relay
 
     OUT.mkdir(parents=True, exist_ok=True)
     radio()
     beds()
     foley()
     build_story()
+    build_relay()
