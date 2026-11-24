@@ -1,9 +1,12 @@
-.runtime/
-backend/.runtime/
+.tools/
+.parkour-runtime/
+backend/.parkour-runtime/
 backend/target/
 backend/project/target/
 backend/project/project/
 game/.godot/
 __pycache__/
-*.blend1
-.night-runtime/
+
+.env
+.runtime/
+backend/.runtime/

@@ -1,5 +1,4 @@
 $ErrorActionPreference = 'Stop'
-
 function Find-SodaPg {
     $found = Get-Command pg_ctl.exe -ErrorAction SilentlyContinue
     $choices = @($env:SODA_PG_BIN, 'D:/PostgreSQL/bin')
@@ -13,15 +12,12 @@ function Find-SodaPg {
     }
     throw 'PostgreSQL is missing. Set SODA_PG_BIN to the directory containing pg_ctl.exe.'
 }
-
 function Test-SodaDatabase([string]$pg, [string]$cluster, [string]$pwFile, [int]$port) {
     $oldPgPassword = $env:PGPASSWORD
     $oldTimeout = $env:PGCONNECT_TIMEOUT
     $env:PGPASSWORD = [IO.File]::ReadAllText($pwFile)
     $env:PGCONNECT_TIMEOUT = '2'
     try {
-        # Windows PowerShell 5 treats even redirected native stderr as a terminating error.
-        # A refused connection is expected when starting a stopped local server.
         $beforeProbe = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
@@ -39,16 +35,15 @@ function Test-SodaDatabase([string]$pg, [string]$cluster, [string]$pwFile, [int]
         $env:PGCONNECT_TIMEOUT = $oldTimeout
     }
 }
-
 function Start-SodaDb {
     $pg = Find-SodaPg
-    $dir = Join-Path $PSScriptRoot '.night-runtime'
+    $dir = Join-Path $PSScriptRoot '.parkour-runtime'
     $cluster = Join-Path $dir 'pg'
     $pwFile = Join-Path $dir 'local-db-password'
-    $port = 55439
+    $port = 55440
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     if (-not (Test-Path $pwFile)) {
-        if (Test-Path "$cluster/PG_VERSION") { throw 'Restore .night-runtime/local-db-password for the existing night shift database.' }
+        if (Test-Path "$cluster/PG_VERSION") { throw 'Restore .parkour-runtime/local-db-password for the existing parkour database.' }
         $bytes = New-Object byte[] 32
         $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
         try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
@@ -65,21 +60,20 @@ function Start-SodaDb {
         $p = Start-Process -FilePath $launcher -ArgumentList $quoted -WindowStyle Hidden -PassThru
         $null = $p.Handle
         if (-not $p.WaitForExit(45000) -or $p.ExitCode -ne 0) {
-            throw "Could not start the project database on port $port. See .night-runtime/postgres.log."
+            throw "Could not start the project database on port $port. See .parkour-runtime/postgres.log."
         }
     }
     $env:SODA_JDBC_URL = "jdbc:postgresql://127.0.0.1:$port/postgres"
     $env:SODA_DB_USER = 'soda'
     $env:SODA_DB_PASSWORD = [IO.File]::ReadAllText($pwFile)
 }
-
 function Stop-SodaDb {
     $pg = Find-SodaPg
-    $cluster = Join-Path $PSScriptRoot '.night-runtime/pg'
-    $pwFile = Join-Path $PSScriptRoot '.night-runtime/local-db-password'
-    if ((Test-Path "$cluster/PG_VERSION") -and (Test-SodaDatabase $pg $cluster $pwFile 55439)) {
+    $cluster = Join-Path $PSScriptRoot '.parkour-runtime/pg'
+    $pwFile = Join-Path $PSScriptRoot '.parkour-runtime/local-db-password'
+    if ((Test-Path "$cluster/PG_VERSION") -and (Test-SodaDatabase $pg $cluster $pwFile 55440)) {
         & (Join-Path $pg 'pg_ctl.exe') -D $cluster -w -t 30 -m fast stop
-        if ($LASTEXITCODE -ne 0 -or (Test-SodaDatabase $pg $cluster $pwFile 55439)) {
+        if ($LASTEXITCODE -ne 0 -or (Test-SodaDatabase $pg $cluster $pwFile 55440)) {
             throw 'The project database is still running or could not be stopped.'
         }
     }
